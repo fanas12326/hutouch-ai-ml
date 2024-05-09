@@ -19,10 +19,6 @@ from token_count import TokenCount
 from openai import OpenAI
 from collections import Counter
 import gdown  # Import gdown to use it for downloading files from Google Drive
-from dotenv import load_dotenv
-import os
-
-load_dotenv()
 
 app = FastAPI()
 
@@ -388,9 +384,7 @@ async def calculate_task(item: Item):
 
         print(f"JSON data has been written to {filename}")
         
-        openai_api_key = os.getenv('OPENAI_API_KEY')
-        print('Open ai api key: '+openai_api_key)
-        client = OpenAI(api_key=openai_api_key)
+        client = OpenAI(api_key="sk-proj-EbxSPa78mV5GvKSFTXb9T3BlbkFJF9Iac1DnEn2r8r7q17Lu")
         
         def upload_file_to_assistant(filePath):
             # Create a vector store caled "Financial Statements"
@@ -456,9 +450,12 @@ async def calculate_task(item: Item):
                 if run_status.status == "completed":
                     break
                 elif run_status.status == "failed":
+                    count = count + 1
+                    if count == 2:
+                        break
                     print("Run failed: ",run_status.last_error)
-                    break
-                
+                    time.sleep(50)
+
                 time.sleep(25) # wait for 2 seconds before checking again
             if run_status.status == "completed":
                 messages = client.beta.threads.messages.list(

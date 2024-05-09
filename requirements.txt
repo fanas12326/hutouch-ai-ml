@@ -1,3 +1,7 @@
+fastapi
+uvicorn
+pydantic
+openpyxl
 networkx 
 matplotlib 
 graphviz
@@ -5,3 +9,6 @@ openai
 requests
 token_count
 pydot
+nltk
+gdown
+python-dotenv
