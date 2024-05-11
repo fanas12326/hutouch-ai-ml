@@ -1,2 +1,1 @@
-release: python nltk_download.py
-web: gunicorn -w 4 -k uvicorn.workers.UvicornWorker main:app
+web: python nltk_setup.py && gunicorn -w 4 -k uvicorn.workers.UvicornWorker main:app
