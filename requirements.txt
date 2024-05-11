@@ -13,3 +13,4 @@ nltk
 gdown
 python-dotenv
 gunicorn
+pandas
