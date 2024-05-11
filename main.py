@@ -380,7 +380,7 @@ async def calculate_task(item: Item):
         print(reduced_str)
         
         # Specify the filename
-        filename = 'sample_data.json'
+        filename = 'user_data_file.json'
 
         # Writing JSON data to a file
         with open(filename, 'w') as file:
@@ -388,16 +388,25 @@ async def calculate_task(item: Item):
 
         print(f"JSON data has been written to {filename}")
         
+        # Specify the filename
+        filename = 'public_data_file.json'
+
+        # Writing JSON data to a file
+        with open(filename, 'w') as file:
+            json.dump(updated_data, file)
+
+        print(f"JSON data has been written to {filename}")
+        
         openai_api_key = os.getenv('OPENAI_API_KEY')
         print('Open ai api key: '+openai_api_key)
         client = OpenAI(api_key=openai_api_key)
         
-        def upload_file_to_assistant(filePath):
+        def upload_file_to_assistant(filePath1,filePath2):
             # Create a vector store caled "Financial Statements"
-            vector_store = client.beta.vector_stores.create(name="User Data File")
+            vector_store = client.beta.vector_stores.create(name="Uploaded Files")
 
             # Ready the files for upload to OpenAI
-            file_paths = [filePath]
+            file_paths = [filePath1,filePath2]
             file_streams = [open(path, "rb") for path in file_paths]
 
             # Use the upload and poll SDK helper to upload the files, add them to the vector store,
@@ -412,11 +421,11 @@ async def calculate_task(item: Item):
             print(vector_store.id)
 
             return vector_store.id
-        
-        vector_id = upload_file_to_assistant("sample_data.json")
+
+        vector_id = upload_file_to_assistant("user_data_file.json","public_data_file.json")
         
         assistant = client.beta.assistants.update(
-        assistant_id="asst_xsD31bNjZ5wFbLqwdiqZz4xQ",
+        assistant_id="asst_gzeLQXC6s9aGZzrakZbuAho2",
         tool_resources={"file_search": {"vector_store_ids": [vector_id]}},
         model="gpt-3.5-turbo-0125"
         )
@@ -434,7 +443,7 @@ async def calculate_task(item: Item):
 
             return json_object
         
-        content = f"The below is my public domain task {updated_data} User task is uploaded in file retrieve it from there. Provide output in JSON array without commentary or any explanation of the output."
+        content = f"Compare the files and generate output. Output must be a valid json array"
         print(content)
         
         def get_response():
@@ -443,12 +452,12 @@ async def calculate_task(item: Item):
             message = client.beta.threads.messages.create(
                 thread_id = thread.id,
                 role = "user",
-                content = f"The below is my public domain task {updated_data} User task is uploaded in file retrieve it from there. Provide output in JSON array without commentary or any explanation of the output."
+                content = f"Compare the files and generate output. Output must be a valid json array"
             )
             #run the assistant
             run = client.beta.threads.runs.create(
                 thread_id = thread.id,
-                assistant_id = 'asst_xsD31bNjZ5wFbLqwdiqZz4xQ',
+                assistant_id = 'asst_gzeLQXC6s9aGZzrakZbuAho2',
             )
             # Waits for the run to be completed
             while True:
