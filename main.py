@@ -214,8 +214,6 @@ async def calculate_task(item: Item):
         user_merged_data = " ".join(user_merged_data)
         user_merged_data
         
-        nltk.download('punkt')
-        nltk.download('stopwords')
         
         #function that help to preprocess the data
 
