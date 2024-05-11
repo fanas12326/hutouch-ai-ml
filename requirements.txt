@@ -12,3 +12,4 @@ pydot
 nltk
 gdown
 python-dotenv
+gunicorn
