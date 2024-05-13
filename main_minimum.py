@@ -265,3 +265,106 @@ async def identify_task(item: Item):
         output.append(f"Task: {task}, Steps: {', '.join(steps)}")
 
     return {"success": True, "output": output}
+
+@app.post("/task-priority/")
+async def task_priority(item: Item):
+    user_prompt = item.prompt
+    user_data = item.data
+    
+    json_obj_2 = json.loads(user_data)
+    json_obj_2
+    
+    # Serializing json
+    json_object = json.dumps(json_obj_2, indent=4)
+    
+    # Writing to sample.json
+    with open("sample.json", "w") as outfile:
+        outfile.write(json_object)
+        
+    client = OpenAI(api_key="sk-proj-csMstUJ72UbVhyIBeE5ET3BlbkFJyTfXZ9fEZ4eC5N14i4X8")
+    
+    def upload_file_to_assistant(filePath1):
+        # Create a vector store caled "Financial Statements"
+        vector_store = client.beta.vector_stores.create(name="Uploaded Files")
+
+        # Ready the files for upload to OpenAI
+        file_paths = [filePath1]
+        file_streams = [open(path, "rb") for path in file_paths]
+
+        # Use the upload and poll SDK helper to upload the files, add them to the vector store,
+        # and poll the status of the file batch for completion.
+        file_batch = client.beta.vector_stores.file_batches.upload_and_poll(
+            vector_store_id=vector_store.id, files=file_streams
+        )
+
+        # You can print the status and the file counts of the batch to see the result of this operation.
+        print(file_batch.status)
+        print(file_batch.file_counts)
+        print(vector_store.id)
+
+        return vector_store.id
+    
+    vector_id = upload_file_to_assistant("sample.json")
+    
+    prompt = f"Fetch Tasks for Today with the Following Criteria:\nPrimary Criteria:\nPriority is urgent and due date is today.\nSecondary Criteria if Primary is Not Met:\nIf there is no due date, check if the priority is urgent.\nIf there is no priority, check if the due date is today.\nIf there are no tasks due today, check for tasks due tomorrow or nearby dates with urgent priority.\nIf there is no priority, check for tasks with due dates in the near future.\nIf there is no due date and no priority, check for tasks whose content (name or description) contains words related to urgency like \"urgent,\" \"EOD,\" \"ASAP.\"\nAdditional Requirements:\nProvide a single external link related to the task content.\nInclude links to open the task, and details such as description, name, due date, and priority level.\nInclude links where available.\nVerify if tasks are completed by checking for user replies; exclude if replied to.\nPresentation Style:\nList tasks sequentially with serial numbers.\nInclude the app name as a parameter within each task's details.\nEnsure each task entry is concise and includes all necessary information without additional explanations.\nMake task details a bit detailed.\nmodify description parameter in such a way that it should tell the senders name as well like this sender is asking for that etc in the apps where there is name in the data , do not modify description for quire\nDo not seperate tasks by app names , instead add app name paramter in it and give bullet points to tasks"
+    print(prompt)
+    
+    assistant = client.beta.assistants.update(
+        assistant_id="asst_V16Ar6bvvgdREnsQCZPkibrO",
+        tool_resources={"file_search": {"vector_store_ids": [vector_id]}},
+        model="gpt-3.5-turbo-0125"
+    )
+    
+    def get_response():
+        count = 0
+        thread = client.beta.threads.create()
+        message = client.beta.threads.messages.create(
+            thread_id = thread.id,
+            role = "user",
+            content = prompt
+        )
+        #run the assistant
+        run = client.beta.threads.runs.create(
+            thread_id = thread.id,
+            assistant_id = 'asst_V16Ar6bvvgdREnsQCZPkibrO',
+        )
+        # Waits for the run to be completed
+        while True:
+            run_status = client.beta.threads.runs.retrieve(thread_id = thread.id, run_id = run.id)
+            if run_status.status == "completed":
+                break
+            elif run_status.status == "failed":
+                break
+            time.sleep(3) # wait for 2 seconds before checking 
+            
+        if run_status.status == "completed":
+            messages = client.beta.threads.messages.list(
+                thread_id = thread.id
+            )
+
+            # Prints the messages with the latest message at the bottom
+            number_of_messages = len(messages.data)
+            print( f'Number of messages: {number_of_messages}')
+
+            for message in reversed(messages.data):
+                role = message.role
+                for content in message.content:
+                    if content.type == 'text':
+                        response = content.text.value
+                        print(f'\n{role}: {response}')
+
+        else:
+            print("Something went wrong")
+            response = 'Failed'
+
+        # Extract and print JSON
+        if response != 'Failed':
+            return response
+
+        else:
+            return "Failed"
+
+    get_updated_response = get_response()
+    print(get_updated_response)
+    
+    return get_updated_response
