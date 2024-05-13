@@ -758,13 +758,9 @@ async def task_priority(item: Item):
             if run_status.status == "completed":
                 break
             elif run_status.status == "failed":
-                count = count + 1
-                if count == 2:
-                    break
-            print("Run failed: ",run_status.last_error)
-            time.sleep(50)
-
-            time.sleep(25) # wait for 2 seconds before checking again
+                break
+            time.sleep(3) # wait for 2 seconds before checking 
+            
         if run_status.status == "completed":
             messages = client.beta.threads.messages.list(
                 thread_id = thread.id
