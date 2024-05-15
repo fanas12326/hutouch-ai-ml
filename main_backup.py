@@ -504,8 +504,6 @@ async def calculate_task(item: Item):
             print(get_updated_response)
             if get_updated_response != "[]":
                 flag=False
-            elif get_updated_response == "[]":
-                time.sleep(25)
 
         if(get_updated_response != "Failed"):
             
