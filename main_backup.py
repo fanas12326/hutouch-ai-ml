@@ -621,11 +621,11 @@ async def calculate_task(item: Item):
             # Print the response from the server
             print(response.text)
             
-            return {"id": user_id,"user_role": user_role,"task":task_updated,"instruction":final_prompt,"success": True}
+            return {"id": user_id,"user_role": user_role,"task":task_updated,"instruction":final_prompt,"status": "success"}
         
         else:
             print('No futher execution')
-            return {"error":"Unable to find tasks"}
+            return {"status":"failed"}
         
 # #hard code
 # @app.post("/identify-task/")
@@ -859,5 +859,8 @@ async def task_priority(item: Item):
 
     get_updated_response = get_response()
     print(get_updated_response)
+    if get_updated_response == "Failed":
+        return {"status":"failed"}
     
-    return get_updated_response
+    response = {"status":"success","tasks":get_updated_response}
+    return response
