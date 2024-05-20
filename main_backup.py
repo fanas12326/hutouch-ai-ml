@@ -21,6 +21,8 @@ from collections import Counter
 import gdown  # Import gdown to use it for downloading files from Google Drive
 from dotenv import load_dotenv
 import os
+from PIL import Image
+from io import BytesIO
 
 load_dotenv()
 
@@ -627,77 +629,6 @@ async def calculate_task(item: Item):
             print('No futher execution')
             return {"status":"failed"}
         
-# #hard code
-# @app.post("/identify-task/")
-# async def identify_task(item: Item):
-#     id = item.id
-    
-#     # Download the CSV file using gdown
-#     url = 'https://drive.google.com/uc?id=1Ivswt6nFooeh1dcKAjel-ELepOjf6e1C'
-#     output = 'application_data.csv'
-#     gdown.download(url, output, quiet=False)
-
-#     # Download necessary NLTK resources
-#     nltk.download('punkt', quiet=True)
-#     nltk.download('stopwords', quiet=True)
-#     nltk.download('averaged_perceptron_tagger', quiet=True)
-#     nltk.download('wordnet', quiet=True)
-
-#     # Define tasks and their specific steps
-#     tasks = {
-#         'UI/UX Design': ['Implement responsive design'],
-#         'API Integration': ['Implement HTTP client', 'Parse JSON data', 'Handle errors and exceptions', 'Cache data', 'Implement pull-to-refresh'],
-#         'Testing': ['Write unit tests', 'Implement widget tests', 'Fix issues'],
-#         'Debugging': ['Review logs', 'Use breakpoints', 'Apply fixes'],
-#         'Performance Optimization': ['Minimize layout rebuilds', 'Use lazy loading', 'Optimize database queries'],
-#         'Maintaining Codebase': ['Refactor code for readability', 'Update dependencies', 'Resolve merge conflicts'],
-#         'Adapting to Platform-Specific Features': ['Implement platform channels']
-#     }
-
-#     def load_data(filename):
-#         # Adjust the path to the location where the file is actually downloaded
-#         return pd.read_csv(filename)
-
-        
-#     def extract_keywords(user_prompt):
-#         stop_words = set(stopwords.words('english'))
-#         return set(word_tokenize(user_prompt.lower())) - stop_words
-    
-#     def extract_relevant_task(user_prompt):
-#         prompt_keywords = extract_keywords(user_prompt)
-#         max_overlap = 0
-#         best_match = ("No specific task matched", [])
-#         for task, steps in tasks.items():
-#             task_keywords = set(task.lower().split())
-#             overlap = len(prompt_keywords & task_keywords)
-#             if overlap > max_overlap:
-#                 max_overlap = overlap
-#                 best_match = (task, steps)
-#         return best_match
-
-#     def compare_tags(input_tags, app_tags):
-#         input_count = Counter(input_tags)
-#         app_count = Counter(app_tags)
-#         return sum(min(input_count[tag], app_count[tag]) for tag in input_count if tag in app_count)
-
-#     def find_top_apps(df, task_name, steps, top_n=2):
-#         task_keywords = set(task_name.lower().split())
-#         steps_keywords = set(word.lower() for step in steps for word in word_tokenize(step))
-#         input_tags = task_keywords.union(steps_keywords)
-#         df['score'] = df['tags'].apply(lambda tags: compare_tags(input_tags, extract_keywords(tags)))
-#         return df.sort_values(by='score', ascending=False).head(top_n)['application_name']
-    
-#     user_prompt = item.prompt
-#     filename = 'application_data.csv'  # This is the filename where gdown downloaded the file
-#     df = load_data(filename)
-#     task_name, steps = extract_relevant_task(user_prompt)
-#     top_apps = find_top_apps(df, task_name, steps)
-#     print("Identified Task:", task_name)
-#     print("Steps:", ', '.join(steps))
-#     print("\nTop Matching Applications:")
-#     print(top_apps.to_string(index=False))
-#     return {"status" : "success", "task": task_name, "steps": steps, "top_apps": top_apps.to_list()}
-
 @app.post("/identify-task/")
 async def identify_task(item: Item):
     task_data = item.data
@@ -774,7 +705,9 @@ async def task_priority(item: Item):
     with open("sample.json", "w") as outfile:
         outfile.write(json_object)
         
-    client = OpenAI(api_key="sk-proj-csMstUJ72UbVhyIBeE5ET3BlbkFJyTfXZ9fEZ4eC5N14i4X8")
+    openai_api_key = os.getenv('OPENAI_API_KEY')
+    print('Open ai api key: '+openai_api_key)
+    client = OpenAI(api_key=openai_api_key)
     
     def upload_file_to_assistant(filePath1):
         # Create a vector store caled "Financial Statements"
@@ -864,3 +797,246 @@ async def task_priority(item: Item):
     
     response = {"status":"success","tasks":get_updated_response}
     return response
+
+@app.post("/figma-custom-ui/")
+async def figma_custom_ui(item: Item):
+    api_data = item.data
+    
+    temp_data = item.prompt
+    data_json_obj = json.loads(temp_data)
+    print(data_json_obj)
+    
+    image_url = data_json_obj["image_url"]
+    user_role = data_json_obj["user_role"]
+    
+    print(image_url)
+    api_json_data = json.loads(api_data)
+    print(api_json_data)
+    
+    openai_api_key = os.getenv('OPENAI_API_KEY')
+    print('Open ai api key: '+openai_api_key)
+    client = OpenAI(api_key=openai_api_key)
+
+    #Prompt 1
+    response = client.chat.completions.create(
+    model="gpt-4o",
+    messages=[
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Generate functional requirements of the UI having each component functionality explanation"},
+                {
+                "type": "image_url",
+                "image_url": {
+                    "url": image_url,
+                },
+                },
+            ],
+        }
+    ],
+    max_tokens=1000,
+    )
+
+    response_1 = response.choices[0].message.content
+    print(response_1)
+
+    #Prompt2
+    my_assistant = client.beta.assistants.create(
+        instructions="You are an helpful assistant",
+        name="Good Assistant",
+        tools=[{"type": "file_search"}],
+        model="gpt-4o",
+    )
+    print(my_assistant)
+
+    # Download the image
+    response = requests.get(image_url)
+    if response.status_code == 200:
+        # Open the image using Pillow
+        image = Image.open(BytesIO(response.content))
+
+        # Convert and save the image as PNG
+        image.save("output.png", format="PNG")
+        print("Image saved as output.png")
+    else:
+        print("Failed to retrieve the image")
+
+    # uploading ui image to open ai
+    def upload_image_file_to_openai(filepath):
+        uploaded_file = client.files.create(
+            file=open(filepath, "rb"),
+            purpose="vision"
+        )
+        return uploaded_file.id
+    
+    # uploading ui image to open ai
+    def upload_document_file_to_openai(filepath):
+        uploaded_file = client.files.create(
+            file=open(filepath, "rb"),
+            purpose="assistants"
+        )
+        return uploaded_file.id
+
+    file_id = upload_image_file_to_openai("output.png")
+    print(file_id)
+
+    image_file_id = file_id
+    
+    # Specify the filename
+    filename = 'figma_data_file.json'
+
+    # Writing JSON data to a file
+    with open(filename, 'w') as file:
+        json.dump(api_json_data, file)
+
+    print(f"JSON data has been written to {filename}")
+
+    # uploading figma api data to vector store
+    def upload_file_to_vector_store(filePath1):
+        # Create a vector store caled "Financial Statements"
+        vector_store = client.beta.vector_stores.create(name="Document Files")
+
+        # Ready the files for upload to OpenAI
+        file_paths = [filePath1]
+        file_streams = [open(path, "rb") for path in file_paths]
+
+        # Use the upload and poll SDK helper to upload the files, add them to the vector store,
+        # and poll the status of the file batch for completion.
+        file_batch = client.beta.vector_stores.file_batches.upload_and_poll(
+            vector_store_id=vector_store.id, files=file_streams
+        )
+
+        # You can print the status and the file counts of the batch to see the result of this operation.
+        print(file_batch.status)
+        print(file_batch.file_counts)
+        print(vector_store.id)
+
+        return vector_store.id
+
+    vector_id = upload_file_to_vector_store("figma_data_file.json")
+
+    assistant_id = my_assistant.id
+    print("file_id: ",file_id)
+    print("assistant_id: ",assistant_id)
+    print("vector_id: ",vector_id)
+    
+    thread = client.beta.threads.create()
+    thread_id = thread.id
+    print(thread_id)
+
+    def update_assistant(vectorId):
+        assistant = client.beta.assistants.update(
+            assistant_id=assistant_id,
+            tool_resources={"file_search": {"vector_store_ids": [vectorId]}},
+        )   
+        return assistant
+
+    updated_assistant = update_assistant(vector_id)
+    print(updated_assistant)
+    
+    def get_response(threadID,payload):
+        message = client.beta.threads.messages.create(
+            thread_id = threadID,
+            role = "user",
+            content = payload
+        )
+        print(message)
+        #run the assistant
+        run = client.beta.threads.runs.create(
+            thread_id = thread.id,
+            assistant_id = assistant_id,
+        )
+        print(run)
+        # Waits for the run to be completed
+        while True:
+            run_status = client.beta.threads.runs.retrieve(thread_id = thread.id, run_id = run.id)
+            if run_status.status == "completed":
+                break
+            elif run_status.status == "failed":
+                print("Run failed: ",run_status.last_error)
+                break
+
+        if run_status.status == "completed":
+            messages = client.beta.threads.messages.list(
+                thread_id = thread.id
+            )
+
+            # Prints the messages with the latest message at the bottom
+            number_of_messages = len(messages.data)
+            print( f'Number of messages: {number_of_messages}')
+
+            for message in reversed(messages.data):
+                role = message.role
+                for content in message.content:
+                    if content.type == 'text':
+                        response = content.text.value
+                        print(f'\n{role}: {response}')
+
+        else:
+            print("Something went wrong")
+            response = 'Failed'
+
+        return response
+
+    payload = [{"type": "text", "text": f"Generate a {user_role} code for the figma UI based on UI image, figma styling data and  Description of the UI: \" {response_1} \"Make separate files for reusable components, classes and asssets"},{"type": "image_file","image_file": {"file_id": file_id}}]
+    response_2 = get_response(thread_id,payload)
+    print(response_2)
+
+    #deleting the uploaded image file
+    def delete_openai_files(file_id):
+        deleted_image_file = client.files.delete(file_id)
+        return deleted_image_file
+        
+    vector_store_files = client.beta.vector_stores.files.list(
+        vector_store_id=vector_id
+    )
+    print(vector_store_files)
+
+
+    file_id = vector_store_files.data[0].id
+    print(file_id)
+
+    deleted_vector_store_file = client.beta.vector_stores.files.delete(
+        vector_store_id=vector_id,
+        file_id=file_id
+    )
+    print(deleted_vector_store_file)
+
+    file_id = upload_document_file_to_openai("Common_Functionality.json")
+    print(file_id)
+
+    vector_store_file = client.beta.vector_stores.files.create(
+        vector_store_id=vector_id,
+        file_id=file_id
+    )
+    print(vector_store_file)
+    
+    # prompt 3
+    
+    print(thread_id)
+
+    payload = "Please generate functional code for each interactable element in the provided UI. Refer to the common functionality steps in the uploaded file for guidance. Ensure that the output code is fully functional and incorporates the necessary logic for the existing UI components. Do not add any additional functionality beyond what is required for the current elements."
+    response_3 = get_response(thread_id,payload)
+    print(response_3)
+
+    deleted_image_file = delete_openai_files(image_file_id)
+    print(deleted_image_file)
+    
+    deleted_document_file = delete_openai_files(file_id)
+    print(deleted_document_file)
+
+    #deleting the uploaded vector, so that i can create a new one
+    deleted_vector_store = client.beta.vector_stores.delete(
+    vector_store_id=vector_id
+    )
+    print(deleted_vector_store)
+
+    response = client.beta.assistants.delete(assistant_id)
+    print(response)
+    
+    if response_3=="Failed":
+        return {"status":"failed"}
+    else:
+        return {"status":"success","response":response_3}
+    
+        

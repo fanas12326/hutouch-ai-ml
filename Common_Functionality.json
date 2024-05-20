@@ -1,0 +1,37 @@
+[
+    {
+        "Functionality Name":"Search",
+        "Description":"1. User enters a keyword in search box\n2. App should search within data and should show only the data which includes the mentioned keyword",
+        "Type":"Textbox"
+    },
+    {
+        "Functionality Name":"Filter",
+        "Description":"1. When pressed on Filter button, a pop up Modal should appear having two options `Oldest` and `Latest`\n2. User can select any one of the option \n3. When selected `Oldest` the modal should disappear and data must be sorted accorfing to the oldest date or oldest time\n4. When selected `Latest` the modal should disappear and data must be sorted accorfing to the latest date or oldest time",
+        "Type":"Button"
+    },
+    {
+        "Functionality Name":"Back",
+        "Description":"Should navigate to the previous screen",
+        "Type":"Button"
+    },
+    {
+        "Functionality Name":"Email",
+        "Description":"1. Text field that takes email as an input\n2. After enteing the text if it doesn't contain '@' it will display a message as 'Invalid Email' below it\n",
+        "Type":"Textbox"
+    },
+    {
+        "Functionality Name":"Password ",
+        "Description":"1. Textfield that takes password as an input \n2. Password validation must be implemented based on below criteria \n - Password should not contain any space.\n - Password should contain at least one digit(0-9).\n - Password must contain at least one lowercase letter (A-Z).\n - Password must contain at least one uppercase letter (A-Z).\n - Password must contain at least one character like this (@, #, %, &, !, $, etc\u2026)\n3. Create a function to check wheather the criteria meets or not\n4. If any of the criteria not met then it must mention it below the password",
+        "Type":"Textbox"
+    },
+    {
+        "Functionality Name":"Date",
+        "Description":"Implement a calender to select date from it and it  will be automatically fed into the text area",
+        "Type":"Textbox"
+    },
+    {
+        "Functionality Name":"Star",
+        "Description":"The Star must glow when user press on it and come back to normal when user again presses on it ",
+        "Type":"Icon"
+    }
+]
