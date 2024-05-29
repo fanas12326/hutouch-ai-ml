@@ -1010,7 +1010,7 @@ async def figma_custom_ui(item: Item):
             ],
         }
     ],
-    max_tokens=1000,
+    max_tokens=500,
     )
 
     response_1 = response.choices[0].message.content
