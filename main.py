@@ -32,6 +32,16 @@ load_dotenv()
 
 app = FastAPI()
 
+@app.middleware("http")
+async def redirect_to_https(request: Request, call_next):
+    if os.getenv("FORCE_HTTPS") == "true":
+        url = request.url
+        if url.scheme == "http":
+            url = url.replace(scheme="https")
+            return RedirectResponse(url)
+    response = await call_next(request)
+    return response
+
 class Item(BaseModel):
     id: int
     prompt: str
