@@ -28,21 +28,10 @@ import spacy
 import asyncio
 from fastapi.responses import StreamingResponse
 from typing import AsyncGenerator
-from concurrent.futures import ThreadPoolExecutor
 
 load_dotenv()
 
 app = FastAPI()
-
-@app.middleware("http")
-async def redirect_to_https(request: Request, call_next):
-    if os.getenv("FORCE_HTTPS") == "true":
-        url = request.url
-        if url.scheme == "http":
-            url = url.replace(scheme="https")
-            return RedirectResponse(url)
-    response = await call_next(request)
-    return response
 
 class Item(BaseModel):
     id: int
@@ -986,150 +975,169 @@ async def task_priority(item: Item):
     response = {"status":"success","tasks":get_updated_response}
     return response
 
-
-executor = ThreadPoolExecutor(max_workers=10)
-
-async def run_in_executor(func, *args, **kwargs):
-    loop = asyncio.get_event_loop()
-    partial_func = lambda: func(*args, **kwargs)
-    return await loop.run_in_executor(executor, partial_func)
-
 @app.post("/figma-custom-ui/")
 async def figma_custom_ui(item: Item):
     api_data = item.data
+    
     temp_data = item.prompt
     data_json_obj = json.loads(temp_data)
+    print(data_json_obj)
     
     image_url = data_json_obj["image_url"]
     user_role = data_json_obj["user_role"]
     
+    print(image_url)
     api_json_data = json.loads(api_data)
+    print(api_json_data)
     
     openai_api_key = os.getenv('OPENAI_API_KEY')
+    print('Open ai api key: '+openai_api_key)
     client = OpenAI(api_key=openai_api_key)
 
-    # Prompt 1
-    response = await run_in_executor(
-        client.chat.completions.create,
-        model="gpt-4o",
-        messages=[
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": "Generate functional requirements of the UI having each component functionality explanation"},
-                    {"type": "image_url", "image_url": {"url": image_url}},
-                ],
-            }
-        ],
-        max_tokens=500,
+    #Prompt 1
+    response = client.chat.completions.create(
+    model="gpt-4o",
+    messages=[
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Generate functional requirements of the UI having each component functionality explanation"},
+                {
+                "type": "image_url",
+                "image_url": {
+                    "url": image_url,
+                },
+                },
+            ],
+        }
+    ],
+    max_tokens=500,
     )
 
     response_1 = response.choices[0].message.content
     print(response_1)
-    
-    # Prompt 2
-    my_assistant = await run_in_executor(
-        client.beta.assistants.create,
-        instructions="You are a helpful assistant",
+
+    #Prompt2
+    my_assistant = client.beta.assistants.create(
+        instructions="You are an helpful assistant",
         name="Good Assistant",
         tools=[{"type": "file_search"}],
         model="gpt-4o",
     )
     print(my_assistant)
 
-    # Download and save the image
-    response = await run_in_executor(requests.get, image_url)
+    # Download the image
+    response = requests.get(image_url)
     if response.status_code == 200:
+        # Open the image using Pillow
         image = Image.open(BytesIO(response.content))
-        image.save("output.png", format="PNG")
-    else:
-        return {"status": "failed", "reason": "Failed to retrieve the image"}
 
-    async def upload_image_file_to_openai(filepath):
-        uploaded_file = await run_in_executor(
-            client.files.create,
+        # Convert and save the image as PNG
+        image.save("output.png", format="PNG")
+        print("Image saved as output.png")
+    else:
+        print("Failed to retrieve the image")
+
+    # uploading ui image to open ai
+    def upload_image_file_to_openai(filepath):
+        uploaded_file = client.files.create(
             file=open(filepath, "rb"),
             purpose="vision"
         )
         return uploaded_file.id
     
+    # uploading ui image to open ai
     def upload_document_file_to_openai(filepath):
         uploaded_file = client.files.create(
             file=open(filepath, "rb"),
             purpose="assistants"
         )
         return uploaded_file.id
-    
-    file_id = await upload_image_file_to_openai("output.png")
+
+    file_id = upload_image_file_to_openai("output.png")
     print(file_id)
-    image_id = file_id
+
+    image_file_id = file_id
     
+    # Specify the filename
     filename = 'figma_data_file.json'
+
+    # Writing JSON data to a file
     with open(filename, 'w') as file:
         json.dump(api_json_data, file)
 
-    async def upload_file_to_vector_store(filePath1):
-        vector_store = await run_in_executor(client.beta.vector_stores.create, name="Document Files")
+    print(f"JSON data has been written to {filename}")
+
+    # uploading figma api data to vector store
+    def upload_file_to_vector_store(filePath1):
+        # Create a vector store caled "Financial Statements"
+        vector_store = client.beta.vector_stores.create(name="Document Files")
+
+        # Ready the files for upload to OpenAI
         file_paths = [filePath1]
         file_streams = [open(path, "rb") for path in file_paths]
 
-        file_batch = await run_in_executor(
-            client.beta.vector_stores.file_batches.upload_and_poll,
+        # Use the upload and poll SDK helper to upload the files, add them to the vector store,
+        # and poll the status of the file batch for completion.
+        file_batch = client.beta.vector_stores.file_batches.upload_and_poll(
             vector_store_id=vector_store.id, files=file_streams
         )
 
+        # You can print the status and the file counts of the batch to see the result of this operation.
+        print(file_batch.status)
+        print(file_batch.file_counts)
+        print(vector_store.id)
+
         return vector_store.id
 
-    vector_id = await upload_file_to_vector_store("figma_data_file.json")
-    print(vector_id)
-    
-    assistant_id = my_assistant.id
+    vector_id = upload_file_to_vector_store("figma_data_file.json")
 
-    thread = await run_in_executor(client.beta.threads.create)
+    assistant_id = my_assistant.id
+    print("file_id: ",file_id)
+    print("assistant_id: ",assistant_id)
+    print("vector_id: ",vector_id)
+    
+    thread = client.beta.threads.create()
     thread_id = thread.id
     print(thread_id)
-    
-    async def update_assistant(vectorId):
-        assistant = await run_in_executor(
-            client.beta.assistants.update,
+
+    def update_assistant(vectorId):
+        assistant = client.beta.assistants.update(
             assistant_id=assistant_id,
             tool_resources={"file_search": {"vector_store_ids": [vectorId]}},
-        )
+        )   
         return assistant
 
-    updated_assistant = await update_assistant(vector_id)
-
+    updated_assistant = update_assistant(vector_id)
     print(updated_assistant)
     
-    async def get_response(threadID, payload):
-        message = await run_in_executor(
-            client.beta.threads.messages.create,
-            thread_id=threadID,
-            role="user",
-            content=payload
+    def get_response(threadID,payload):
+        message = client.beta.threads.messages.create(
+            thread_id = threadID,
+            role = "user",
+            content = payload
         )
         print(message)
-        
-        run = await run_in_executor(
-            client.beta.threads.runs.create,
-            thread_id=threadID,
-            assistant_id=assistant_id,
+        #run the assistant
+        run = client.beta.threads.runs.create(
+            thread_id = thread.id,
+            assistant_id = assistant_id,
         )
         print(run)
-        
+        # Waits for the run to be completed
         while True:
-            run_status = await run_in_executor(
-                client.beta.threads.runs.retrieve,
-                thread_id=threadID,
-                run_id=run.id
-            )
+            run_status = client.beta.threads.runs.retrieve(thread_id = thread.id, run_id = run.id)
             if run_status.status == "completed":
                 break
             elif run_status.status == "failed":
-                return {"status": "failed", "reason": run_status.last_error}
+                print("Run failed: ",run_status.last_error)
+                break
 
         if run_status.status == "completed":
-            messages = await run_in_executor(client.beta.threads.messages.list, thread_id=threadID)
+            messages = client.beta.threads.messages.list(
+                thread_id = thread.id
+            )
+
             # Prints the messages with the latest message at the bottom
             number_of_messages = len(messages.data)
             print( f'Number of messages: {number_of_messages}')
@@ -1140,50 +1148,73 @@ async def figma_custom_ui(item: Item):
                     if content.type == 'text':
                         response = content.text.value
                         print(f'\n{role}: {response}')
-                        
+
         else:
             print("Something went wrong")
             response = 'Failed'
-        
+
         return response
 
-    payload = [
-        {"type": "text", "text": f"Generate a {user_role} code for the figma UI based on UI image, figma styling data and Description of the UI: \" {response_1} \"Make separate files for reusable components, classes and assets"},
-        {"type": "image_file", "image_file": {"file_id": file_id}}
-    ]
-    response_2 = await get_response(thread_id, payload)
+    payload = [{"type": "text", "text": f"Generate a {user_role} code for the figma UI based on UI image, figma styling data and  Description of the UI: \" {response_1} \"Make separate files for reusable components, classes and asssets"},{"type": "image_file","image_file": {"file_id": file_id}}]
+    response_2 = get_response(thread_id,payload)
     print(response_2)
-    
-    async def delete_openai_files(file_id):
-        return await run_in_executor(client.files.delete, file_id)
 
-    vector_store_files = await run_in_executor(client.beta.vector_stores.files.list, vector_store_id=vector_id)
+    #deleting the uploaded image file
+    def delete_openai_files(file_id):
+        deleted_image_file = client.files.delete(file_id)
+        return deleted_image_file
+        
+    vector_store_files = client.beta.vector_stores.files.list(
+        vector_store_id=vector_id
+    )
     print(vector_store_files)
-    
-    file_id = vector_store_files.data[0].id
 
-    deleted_vector_store_file = await run_in_executor(
-        client.beta.vector_stores.files.delete,
+
+    file_id = vector_store_files.data[0].id
+    print(file_id)
+
+    deleted_vector_store_file = client.beta.vector_stores.files.delete(
         vector_store_id=vector_id,
         file_id=file_id
     )
+    print(deleted_vector_store_file)
 
     file_id = upload_document_file_to_openai("Common_Functionality.json")
-    vector_store_file = await run_in_executor(client.beta.vector_stores.files.create, vector_store_id=vector_id, file_id=file_id)
+    print(file_id)
+
+    vector_store_file = client.beta.vector_stores.files.create(
+        vector_store_id=vector_id,
+        file_id=file_id
+    )
+    print(vector_store_file)
+    
+    # prompt 3
+    
+    print(thread_id)
 
     payload = "Generate logic code for every interactable element and modify the code. The output must be fully functional. Generate logic for the code by yourself don't expect from user. I had uploaded some common functionality steps in the file you can refer from there to create functionality logic for component of UI. No need to add any additional functionality into the code, generate functionality for elements that are already present in the ui."
-    response_3 = await get_response(thread_id, payload)
+    response_3 = get_response(thread_id,payload)
     print(response_3)
-    deleted_image_file = await delete_openai_files(image_id)
-    deleted_document_file = await delete_openai_files(file_id)
 
-    deleted_vector_store = await run_in_executor(client.beta.vector_stores.delete, vector_store_id=vector_id)
-    response = await run_in_executor(client.beta.assistants.delete, assistant_id)
+    deleted_image_file = delete_openai_files(image_file_id)
+    print(deleted_image_file)
+    
+    deleted_document_file = delete_openai_files(file_id)
+    print(deleted_document_file)
+    
+    #deleting the uploaded vector, so that i can create a new one
+    deleted_vector_store = client.beta.vector_stores.delete(
+    vector_store_id=vector_id
+    )
+    print(deleted_vector_store)
 
-    if response_3 == "Failed":
-        return {"status": "failed"}
+    response = client.beta.assistants.delete(assistant_id)
+    print(response)
+    
+    if response_3=="Failed":
+        return {"status":"failed"}
     else:
-        return {"status": "success", "response": response_3}
+        return {"status":"success","response":response_3}
 
     
 @app.post("/new-functionalities/")
