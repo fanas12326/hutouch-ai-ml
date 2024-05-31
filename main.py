@@ -797,7 +797,9 @@ async def task_priority(item: Item):
     
     response = {"status":"success","tasks":get_updated_response}
     return response
-
+@app.get("/")
+def read_root():
+    return {"Hello": "World"}
 @app.post("/figma-custom-ui/")
 async def figma_custom_ui(item: Item):
     api_data = item.data
