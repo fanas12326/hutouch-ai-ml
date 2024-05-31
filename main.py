@@ -23,6 +23,7 @@ from dotenv import load_dotenv
 import os
 from PIL import Image
 from io import BytesIO
+import spacy
 
 load_dotenv()
 
@@ -32,6 +33,178 @@ class Item(BaseModel):
     id: int
     prompt: str
     data: str
+
+@app.post("/create-a-assistant/")
+async def create_a_assistant(item: Item):
+    
+    temp_data = item.prompt
+    data_json_obj = json.loads(temp_data)
+    print(data_json_obj)
+    
+    assitant_name = data_json_obj["name"]
+    model_name = data_json_obj["model"]
+    instructions = item.data
+    print("assitant_name: "+assitant_name)
+    print("model_name: "+model_name)
+    print("instructions: "+instructions)
+    
+    openai_api_key = os.getenv('OPENAI_API_KEY')
+    print('Open ai api key: '+openai_api_key)
+    client = OpenAI(api_key=openai_api_key)
+    
+    #Prompt2
+    my_assistant = client.beta.assistants.create(
+        instructions=instructions,
+        name=assitant_name,
+        tools=[{"type": "file_search"}],
+        model=model_name,
+    )
+    print(my_assistant)
+
+    assistant_id = my_assistant.id
+    print("assistant_id: "+assistant_id)
+    
+    return {"status": "success", "assistant_id": assistant_id} 
+
+@app.post("/start-a-new-chat/")
+async def start_a_new_chat(item: Item):
+    
+    assistant_id = item.prompt
+    
+    openai_api_key = os.getenv('OPENAI_API_KEY')
+    print('Open ai api key: '+openai_api_key)
+    client = OpenAI(api_key=openai_api_key)
+    
+    thread = client.beta.threads.create()
+    thread_id = thread.id
+    print(thread_id)
+    
+    return {"status": "success", "thread_id": thread_id}
+
+@app.post("/send-message/")
+async def send_message(item: Item):
+    temp_data = item.data
+    data_json_obj = json.loads(temp_data)
+    print(data_json_obj)
+    
+    thread_id = data_json_obj["thread_id"]
+    assistant_id = data_json_obj["assistant_id"]
+    prompt = item.prompt
+
+    openai_api_key = os.getenv('OPENAI_API_KEY')
+    print('Open ai api key: '+openai_api_key)
+    client = OpenAI(api_key=openai_api_key)
+    
+    def get_response(threadID,payload):
+        message = client.beta.threads.messages.create(
+            thread_id = threadID,
+            role = "user",
+            content = payload
+        )
+        print(message)
+        #run the assistant
+        run = client.beta.threads.runs.create(
+            thread_id = threadID,
+            assistant_id = assistant_id,
+        )
+        print(run)
+        # Waits for the run to be completed
+        while True:
+            run_status = client.beta.threads.runs.retrieve(thread_id = threadID, run_id = run.id)
+            if run_status.status == "completed":
+                break
+            elif run_status.status == "failed":
+                print("Run failed: ",run_status.last_error)
+                break
+
+        if run_status.status == "completed":
+            messages = client.beta.threads.messages.list(
+                thread_id = threadID
+            )
+
+            # Prints the messages with the latest message at the bottom
+            number_of_messages = len(messages.data)
+            print( f'Number of messages: {number_of_messages}')
+
+            for message in reversed(messages.data):
+                role = message.role
+                for content in message.content:
+                    if content.type == 'text':
+                        response = content.text.value
+                        print(f'\n{role}: {response}')
+
+        else:
+            print("Something went wrong")
+            response = 'Failed'
+
+        return response
+    
+    response = get_response(thread_id,prompt)
+    
+    print(response)
+    
+    if response=="Failed":
+        return {"status":"failed"}
+    else:
+        return {"status":"success","response":response}
+ 
+@app.post("/upload-file/")
+async def upload_file(item: Item):
+    
+    file_id = item.prompt
+    assistant_id = item.data
+    
+    openai_api_key = os.getenv('OPENAI_API_KEY')
+    print('Open ai api key: '+openai_api_key)
+    client = OpenAI(api_key=openai_api_key)
+    
+    vector_store = client.beta.vector_stores.create(
+        name="Uploaded Files"
+    )
+    print(vector_store)
+    
+    vector_id = vector_store.id
+    print("vector_id: ",vector_id)
+    
+    vector_store_file = client.beta.vector_stores.files.create(
+        vector_store_id=vector_id,
+        file_id=file_id
+    )
+    print("vector_store_file: ",vector_store_file)
+    
+
+    def update_assistant(vectorId):
+        assistant = client.beta.assistants.update(
+            assistant_id=assistant_id,
+            tool_resources={"file_search": {"vector_store_ids": [vectorId]}},
+        )   
+        return assistant
+
+    updated_assistant = update_assistant(vector_id)
+    print("updated_assistant: ",updated_assistant)
+    
+    vector_store_files = client.beta.vector_stores.files.list(
+        vector_store_id=vector_id
+    )
+    
+    return {"status": "success", "response": updated_assistant, "vector_id": vector_id}
+
+
+@app.post("/delete-uploaded-file/")
+async def delete_uploaded_file(item: Item):
+    openai_api_key = os.getenv('OPENAI_API_KEY')
+    print('Open ai api key: '+openai_api_key)
+    client = OpenAI(api_key=openai_api_key)
+    
+    vector_id = item.prompt
+    vector_store_files = client.beta.vector_stores.files.list(
+        vector_store_id=vector_id
+    )
+    print(vector_store_files)
+
+    total_files = len(vector_store_files.data)
+    
+    return {"status":"success","total_files":total_files}    
 
 @app.post("/calculate-task/")
 async def calculate_task(item: Item):
@@ -797,6 +970,9 @@ async def task_priority(item: Item):
     
     response = {"status":"success","tasks":get_updated_response}
     return response
+@app.get("/")
+def read_root():
+    return {"Hello": "World"}
 
 @app.post("/figma-custom-ui/")
 async def figma_custom_ui(item: Item):
@@ -1015,7 +1191,7 @@ async def figma_custom_ui(item: Item):
     
     print(thread_id)
 
-    payload = "Please generate functional code for each interactable element in the provided UI. Refer to the common functionality steps in the uploaded file for guidance. Ensure that the output code is fully functional and incorporates the necessary logic for the existing UI components. Do not add any additional functionality beyond what is required for the current elements."
+    payload = "Generate logic code for every interactable element and modify the code. The output must be fully functional. Generate logic for the code by yourself don't expect from user. I had uploaded some common functionality steps in the file you can refer from there to create functionality logic for component of UI. No need to add any additional functionality into the code, generate functionality for elements that are already present in the ui."
     response_3 = get_response(thread_id,payload)
     print(response_3)
 
@@ -1039,4 +1215,251 @@ async def figma_custom_ui(item: Item):
     else:
         return {"status":"success","response":response_3}
     
+@app.post("/new-functionalities/")
+async def new_functionalities(item: Item):
+    code_data = item.data
+    
+    temp_data = item.prompt
+    data_json_obj = json.loads(temp_data)
+    print(data_json_obj)
+    
+    image_url = data_json_obj["image_url"]
+    user_role = data_json_obj["user_role"]
+    
+    print(image_url)
+    
+    client = OpenAI(api_key="sk-proj-csMstUJ72UbVhyIBeE5ET3BlbkFJyTfXZ9fEZ4eC5N14i4X8")
+
+    #Prompt 1
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Generate functional requirements of the UI having each component functionality explanation with proper positioning"},
+                {
+                "type": "image_url",
+                "image_url": {
+                    "url": image_url,
+                },
+                },
+            ],
+            }
+        ],
+        max_tokens=1000,
+    )
+
+    response_1 = response.choices[0].message.content
+    print(response_1)
+
+    # Download the image
+    response = requests.get(image_url)
+    if response.status_code == 200:
+        # Open the image using Pillow
+        image = Image.open(BytesIO(response.content))
+
+        # Convert and save the image as PNG
+        image.save("output.png", format="PNG")
+        print("Image saved as output.png")
+    else:
+        print("Failed to retrieve the image")
+
+    # uploading ui image to open ai
+    def upload_image_file_to_openai(filepath):
+        uploaded_file = client.files.create(
+            file=open(filepath, "rb"),
+            purpose="vision"
+        )
+        return uploaded_file.id
+    
+    file_id = upload_image_file_to_openai("output.png")
+    print(file_id)
+
+    image_file_id = file_id
+
+    # Define the file path
+    file_path = "code.txt"
+
+    # Open the file in write mode and write the string
+    with open(file_path, "w") as file:
+        file.write(code_data)
+
+    print(f"File created successfully at {file_path}")
+    
+    # uploading figma api data to vector store
+    def upload_file_to_vector_store(filePath1):
+        # Create a vector store caled "Financial Statements"
+        vector_store = client.beta.vector_stores.create(name="Document Files")
+
+        # Ready the files for upload to OpenAI
+        file_paths = [filePath1]
+        file_streams = [open(path, "rb") for path in file_paths]
+
+        # Use the upload and poll SDK helper to upload the files, add them to the vector store,
+        # and poll the status of the file batch for completion.
+        file_batch = client.beta.vector_stores.file_batches.upload_and_poll(
+            vector_store_id=vector_store.id, files=file_streams
+        )
+
+        # You can print the status and the file counts of the batch to see the result of this operation.
+        print(file_batch.status)
+        print(file_batch.file_counts)
+        print(vector_store.id)
+
+        return vector_store.id
+
+    vector_id = upload_file_to_vector_store("code.txt")
+
+    #Prompt2
+    my_assistant = client.beta.assistants.create(
+        instructions="You are an helpful assistant",
+        name="Good Assistant",
+        tools=[{"type": "file_search"}],
+        model="gpt-4o",
+    )
+    print(my_assistant)
+
+    assistant_id = my_assistant.id
+    print("file_id: ",file_id)
+    print("assistant_id: ",assistant_id)
+    print("vector_id: ",vector_id)
+    
+    thread = client.beta.threads.create()
+    thread_id = thread.id
+    print(thread_id)
+
+    def update_assistant(vectorId):
+        assistant = client.beta.assistants.update(
+            assistant_id=assistant_id,
+            tool_resources={"file_search": {"vector_store_ids": [vectorId]}},
+        )
+        return assistant
+
+    updated_assistant = update_assistant(vector_id)
+    print(updated_assistant)
+    
+    def get_response(threadID,payload):
+        message = client.beta.threads.messages.create(
+            thread_id = threadID,
+            role = "user",
+            content = payload
+        )
+        print(message)
+        #run the assistant
+        run = client.beta.threads.runs.create(
+            thread_id = thread.id,
+            assistant_id = assistant_id,
+        )
+        print(run)
+        # Waits for the run to be completed
+        while True:
+            run_status = client.beta.threads.runs.retrieve(thread_id = thread.id, run_id = run.id)
+            if run_status.status == "completed":
+                break
+            elif run_status.status == "failed":
+                print("Run failed: ",run_status.last_error)
+                break
+
+        if run_status.status == "completed":
+            messages = client.beta.threads.messages.list(
+                thread_id = thread.id
+            )
+
+            # Prints the messages with the latest message at the bottom
+            number_of_messages = len(messages.data)
+            print( f'Number of messages: {number_of_messages}')
+
+            for message in reversed(messages.data):
+                role = message.role
+                for content in message.content:
+                    if content.type == 'text':
+                        response = content.text.value
+                        print(f'\n{role}: {response}')
+
+        else:
+            print("Something went wrong")
+            response = 'Failed'
+
+        return response
+
+    payload = [{"type": "text", "text": f"Please modify the code inside the uploaded file to align with the design and layout specifications shown in the provided UI image. Ensure the following:\n\n1. Adapt the visual elements, colors, and layout as per the UI image.\n2. Verify that all interactive elements (buttons, forms, etc.) work correctly according to the new design.\n\nBelow is the functional description of the UI image {response_1}"},{"type": "image_file","image_file": {"file_id": file_id}}]
+    response_2 = get_response(thread_id,payload)
+    
+    print(response_2)
+    
+    #deleting the uploaded image file
+    def delete_openai_files(file_id):
+        deleted_image_file = client.files.delete(file_id)
+        return deleted_image_file
+
+    deleted_image_file = delete_openai_files(image_file_id)
+    print(deleted_image_file)
+
+    #deleting the uploaded vector, so that i can create a new one
+    deleted_vector_store = client.beta.vector_stores.delete(
+        vector_store_id=vector_id
+    )
+    print(deleted_vector_store)
+
+    response = client.beta.assistants.delete(assistant_id)
+    print(response)
+    
+    if response_2=="Failed":
+        return {"status":"failed"}
+    else:
+        return {"status":"success","response":response_2}
+
+@app.post("/detect-file-name/")
+async def detect_file_name(item: Item):
+    prompt = item.prompt
+    
+    # Load the spaCy model
+    nlp = spacy.load('en_core_web_sm')
+    
+    def extract_file_name(statement):
+        # Define a regex pattern to find file names with extensions
+        file_name_pattern = r'\b\w+\.\w+\b'
         
+        # Search for the pattern in the statement
+        file_name_match = re.search(file_name_pattern, statement)
+        
+        if file_name_match:
+            return file_name_match.group()
+        else:
+            # If no extension is found, use the current NLP logic to find potential file names
+            doc = nlp(statement)
+            possible_file_names = []
+
+            for token in doc:
+                # Collect proper nouns (potential file names without extensions)
+                if token.pos_ == 'PROPN':
+                    possible_file_names.append(token.text)
+            
+            # Check for keywords and the words following them
+            keywords = ["file name", "document", "file"]
+            words = statement.split()
+            for i, word in enumerate(words):
+                if any(keyword in word.lower() for keyword in keywords):
+                    # Collect words following the keyword until a non-capitalized word, keyword, or stop word is encountered
+                    file_name_parts = []
+                    for j in range(i + 1, len(words)):
+                        if any(keyword in words[j].lower() for keyword in keywords) or words[j].lower() in ["in", "which", "written", "is", "the"]:
+                            break
+                        file_name_parts.append(words[j])
+                    if file_name_parts:
+                        return ' '.join(file_name_parts)
+            
+            if possible_file_names:
+                return ' '.join(possible_file_names)
+            else:
+                # Fallback: consider the last word if no proper nouns are found
+                if words:
+                    return words[-1]
+                else:
+                    return None
+
+    file_name = extract_file_name(prompt)
+    print("file_name: "+file_name)
+    
+    return {"status":"success","file_name":file_name}
