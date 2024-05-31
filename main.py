@@ -398,7 +398,7 @@ async def calculate_task(item: Item):
         print(f"JSON data has been written to {filename}")
         
         openai_api_key = os.getenv('OPENAI_API_KEY')
-        print('Open ai api key: '+openai_api_key)
+        #print('Open ai api key: '+openai_api_key)
         client = OpenAI(api_key=openai_api_key)
         
         def upload_file_to_assistant(filePath1,filePath2):
