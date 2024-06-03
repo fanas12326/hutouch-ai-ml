@@ -38,68 +38,23 @@ class Item(BaseModel):
     prompt: str
     data: str
 
-@app.post("/create-a-assistant/")
-async def create_a_assistant(item: Item):
-    
-    temp_data = item.prompt
-    data_json_obj = json.loads(temp_data)
-    print(data_json_obj)
-    
-    assitant_name = data_json_obj["name"]
-    model_name = data_json_obj["model"]
-    instructions = item.data
-    print("assitant_name: "+assitant_name)
-    print("model_name: "+model_name)
-    print("instructions: "+instructions)
-    
-    openai_api_key = os.getenv('OPENAI_API_KEY')
-    print('Open ai api key: '+openai_api_key)
-    client = OpenAI(api_key=openai_api_key)
-    
-    #Prompt2
-    my_assistant = client.beta.assistants.create(
-        instructions=instructions,
-        name=assitant_name,
-        tools=[{"type": "file_search"}],
-        model=model_name,
-    )
-    print(my_assistant)
+openai_api_key = os.getenv('OPENAI_API_KEY')
+print('Open ai api key: '+openai_api_key)
+client = OpenAI(api_key=openai_api_key)
 
-    assistant_id = my_assistant.id
-    print("assistant_id: "+assistant_id)
-    
-    return {"status": "success", "assistant_id": assistant_id} 
+@app.post("/random-prompts/")
+async def random_prompts(item: Item):
+    data = json.loads(item.data)
+    print(data)
 
-@app.post("/start-a-new-chat/")
-async def start_a_new_chat(item: Item):
-    
-    assistant_id = item.prompt
-    
-    openai_api_key = os.getenv('OPENAI_API_KEY')
-    print('Open ai api key: '+openai_api_key)
-    client = OpenAI(api_key=openai_api_key)
-    
-    thread = client.beta.threads.create()
-    thread_id = thread.id
-    print(thread_id)
-    
-    return {"status": "success", "thread_id": thread_id}
-
-@app.post("/send-message/")
-async def send_message(item: Item):
-    temp_data = item.data
-    data_json_obj = json.loads(temp_data)
-    print(data_json_obj)
-    
-    thread_id = data_json_obj["thread_id"]
-    assistant_id = data_json_obj["assistant_id"]
     prompt = item.prompt
-
-    openai_api_key = os.getenv('OPENAI_API_KEY')
-    print('Open ai api key: '+openai_api_key)
-    client = OpenAI(api_key=openai_api_key)
+    thread_id = data["thread_id"]
+    assistant_id = data["assistant_id"]
+    print("prompt: ",prompt)
+    print("thread_id: ",thread_id)
+    print("assistant_id: ",assistant_id)
     
-    def get_response(threadID,payload):
+    def get_response(threadID,assistantID,payload):
         message = client.beta.threads.messages.create(
             thread_id = threadID,
             role = "user",
@@ -109,7 +64,7 @@ async def send_message(item: Item):
         #run the assistant
         run = client.beta.threads.runs.create(
             thread_id = threadID,
-            assistant_id = assistant_id,
+            assistant_id = assistantID
         )
         print(run)
         # Waits for the run to be completed
@@ -136,21 +91,42 @@ async def send_message(item: Item):
                     if content.type == 'text':
                         response = content.text.value
                         print(f'\n{role}: {response}')
-
         else:
             print("Something went wrong")
             response = 'Failed'
-
         return response
     
-    response = get_response(thread_id,prompt)
+    if thread_id == "" and assistant_id == "":
+        assistant_name = data["assistant_name"]
+        model_name = data["model_name"]
+        instruction = data["instruction"]
+
+        my_assistant = client.beta.assistants.create(
+            instructions=instruction,
+            name=assistant_name,
+            tools=[{"type": "file_search"}],
+            model=model_name,
+        )
+        print(my_assistant)
+        assistant_id = my_assistant.id
+
+        thread = client.beta.threads.create()
+        thread_id = thread.id
+        print(thread_id)
+
+        curr_payload = prompt
+        response = get_response(thread_id,assistant_id,curr_payload)
+        print(response)
+
+    else:
+        curr_payload = prompt
+        response = get_response(thread_id,assistant_id,curr_payload)
+        print(response)
     
-    print(response)
-    
-    if response=="Failed":
+    if response == "Failed":    
         return {"status":"failed"}
     else:
-        return {"status":"success","response":response}
+        return  {"status":"success","response":response,"thread_id":thread_id,"assistant_id":assistant_id}
  
 @app.post("/upload-file/")
 async def upload_file(item: Item):
@@ -1466,6 +1442,215 @@ async def detect_file_name(item: Item):
     
     return {"status":"success","file_name":file_name}
 
+@app.post("/multiple-files-flow/")
+async def multiple_files_flow(item: Item):
+    #here 3 uses cases will be covered
+    # 1. Update functionality
+    # 2. add new functionality
+    # 3. add new screen
+    
+    temp_data = json.loads(item.prompt)
+    api_data = item.data
+    
+    prompt = temp_data["prompt"]
+    user_role = temp_data["user_role"]
+    image_url = temp_data["image_url"]
+    assistant_id = temp_data["assistant_id"]
+    thread_id = temp_data["thread_id"]
+    
+    print("prompt: ",prompt)
+    print("user_role: ",user_role)
+    print("image_url: ",image_url)
+    print("assistant_id: ",assistant_id)
+    print("thread_id: ",thread_id)
+    
+    if assistant_id == "":
+        completion = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": f"I wanted to generate instructions for training my AI assistant based which is designed for {user_role} developer. example for a react developer, React Native developer: You are React Code Assist an assistant with the knowledge of React Native, Javascript and Redux. You are expert in developing codes and building logic, also you are expert in fixing faulty codes and provide assistance to the user. Similarly generate for {user_role} developer. So, Generate a short description for the prompt don't provide any commentary or explanation for the "}
+            ]
+            )
+
+        role_description = completion.choices[0].message.content
+        print(role_description)
+
+        my_assistant = client.beta.assistants.create(
+            instructions=f"{role_description} Generate {user_role} code based on user prompt\r\nRemember:\r\n1. Generate output by studying the uploaded files\r\n2. Uploaded  Readme.txt contain the proper files and folder structure\r\n3. Link the output to existing project files\r\n4. Generate code with proper file and folder name",
+            name=f"{user_role} Code Assist",
+            tools=[{"type": "file_search"}],
+            model="gpt-4o",
+        )
+        print(my_assistant)
+
+        assistant_id = my_assistant.id
+        print("assistant_id: ",assistant_id)
+
+    def remove_extension(filename: str) -> str:
+        # Split the filename into name and extension
+        name = filename.rsplit('.', 1)[0]
+        return name
+
+    def write_code_to_file(filename: str, code: str) -> None:
+        with open(filename, 'w') as file:
+            file.write(code)
+
+    def upload_file_to_vector_store(file_name,vector_id):
+        file = client.files.create(
+            file=open(file_name, "rb"),
+            purpose="assistants"
+        )
+        file_id = file.id
+        uploaded_file_ids.append(file_id)
+
+        vector_store_file = client.beta.vector_stores.files.create(
+            vector_store_id=vector_id,
+            file_id=file_id
+        )
+        print(file_name + " was successfully stored")
+        print(vector_store_file)
+
+
+    def get_file_name(file_path):
+        # Normalize the path to handle backslashes
+        normalized_path = file_path.replace('\\', '/')
+        return os.path.basename(normalized_path)
+
+    isValid = False
+    
+    try:
+        api_data_json = json.loads(api_data)
+        isValid = True
+        print("Its a valid json")
+
+        for files in api_data_json:
+            file_name = get_file_name(files["file_path"])
+            print(file_name)
+            files["file_path"]=file_name
+
+        print(api_data_json)
+    except ValueError:
+        print("Invalid Json: ",ValueError)
+
+    if isValid == True:
+        multiple_file_name = []
+        uploaded_file_ids = []
+        for item in api_data_json:
+            code = item['content']
+            filename = remove_extension(item['file_path']) + '.txt'
+            print(filename)
+            multiple_file_name.append(filename)
+            write_code_to_file(filename, code)
+            print(f"Code written to {filename}")
+
+        store_name = "Uploaded files to Store"
+        vector_store = client.beta.vector_stores.create(
+            name=store_name
+        )
+
+        print(vector_store)
+        vector_id = vector_store.id
+
+        for files in multiple_file_name:
+            upload_file_to_vector_store(files,vector_id)
+
+        print(str(len(multiple_file_name))+" was successfully uploaded to vector store "+store_name)
+
+        assistant = client.beta.assistants.update(
+            assistant_id=assistant_id,
+            tool_resources={"file_search": {"vector_store_ids": [vector_id]}},
+        )
+        print("updated assistant: ",assistant)
+
+    else:
+        print("No files uploaded")
+        
+    if(thread_id == ""):
+        empty_thread = client.beta.threads.create()
+        print(empty_thread)
+        thread_id = empty_thread.id
+    else:
+        print("Thread is already created: ",thread_id)
+    
+    def get_response(threadID,payload):
+        message = client.beta.threads.messages.create(
+            thread_id = threadID,
+            role = "user",
+            content = payload
+        )
+        print(message)
+        #run the assistant
+        run = client.beta.threads.runs.create(
+            thread_id = threadID,
+            assistant_id = assistant_id
+        )
+        print(run)
+        # Waits for the run to be completed
+        while True:
+            run_status = client.beta.threads.runs.retrieve(thread_id = threadID, run_id = run.id)
+            if run_status.status == "completed":
+                break
+            elif run_status.status == "failed":
+                print("Run failed: ",run_status.last_error)
+                break
+
+        if run_status.status == "completed":
+            messages = client.beta.threads.messages.list(
+                thread_id = threadID
+            )
+
+            # Prints the messages with the latest message at the bottom
+            number_of_messages = len(messages.data)
+            print( f'Number of messages: {number_of_messages}')
+
+            for message in reversed(messages.data):
+                role = message.role
+                for content in message.content:
+                    if content.type == 'text':
+                        response = content.text.value
+                        print(f'\n{role}: {response}')
+
+        else:
+            print("Something went wrong")
+            response = 'Failed'
+
+        return response
+    
+    # uploading ui image to open ai
+    def upload_image_file_to_openai(filepath):
+        uploaded_file = client.files.create(
+            file=open(filepath, "rb"),
+            purpose="vision"
+        )
+        return uploaded_file.id  
+    
+    if image_url!="":
+        # Download the image
+        response = requests.get(image_url)
+        if response.status_code == 200:
+            # Open the image using Pillow
+            image = Image.open(BytesIO(response.content))
+
+            # Convert and save the image as PNG
+            image.save("output.png", format="PNG")
+            print("Image saved as output.png")
+        else:
+            print("Failed to retrieve the image")
+
+        image_id = upload_image_file_to_openai("output.png")
+        print("Image was successfully uploaded to open ai: ",image_id)
+
+        payload = [{"type": "text", "text": prompt},{"type": "image_file","image_file": {"file_id": image_id}}]
+        response = get_response(thread_id,payload)
+        print(response)
+
+    else:
+        payload = prompt
+        response = get_response(thread_id,payload)
+        print(response)   
+            
+    return {"status ":"success","assistant_id":assistant_id,"thread_id":thread_id, "response":response}
 
 async def stream_response():
     
