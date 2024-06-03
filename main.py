@@ -1562,9 +1562,26 @@ async def multiple_files_flow(item: Item):
             tool_resources={"file_search": {"vector_store_ids": [vector_id]}},
         )
         print("updated assistant: ",assistant)
+        
+        def delete_files_by_name(directory, filenames):
+            for filename in filenames:
+                file_path = os.path.join(directory, filename)
+                try:
+                    if os.path.isfile(file_path):
+                        os.remove(file_path)
+                        print(f"Deleted file: {file_path}")
+                    else:
+                        print(f"File not found: {file_path}")
+                except Exception as e:
+                    print(f"Error deleting file {file_path}: {e}")
+
+        directory = './'
+        delete_files_by_name(directory, multiple_file_name)
 
     else:
         print("No files uploaded")
+        
+    
         
     if(thread_id == ""):
         empty_thread = client.beta.threads.create()
