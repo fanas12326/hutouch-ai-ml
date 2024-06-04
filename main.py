@@ -551,7 +551,7 @@ async def calculate_task(item: Item):
         print(f"JSON data has been written to {filename}")
         
         openai_api_key = os.getenv('OPENAI_API_KEY')
-        print('Open ai api key: '+openai_api_key)
+        #print('Open ai api key: '+openai_api_key)
         client = OpenAI(api_key=openai_api_key)
         
         def upload_file_to_assistant(filePath1,filePath2):
@@ -950,7 +950,9 @@ async def task_priority(item: Item):
     
     response = {"status":"success","tasks":get_updated_response}
     return response
-
+@app.get("/")
+def read_root():
+    return {"Hello": "World"}
 @app.post("/figma-custom-ui/")
 async def figma_custom_ui(item: Item):
     api_data = item.data
@@ -967,7 +969,6 @@ async def figma_custom_ui(item: Item):
     print(api_json_data)
     
     openai_api_key = os.getenv('OPENAI_API_KEY')
-    print('Open ai api key: '+openai_api_key)
     client = OpenAI(api_key=openai_api_key)
 
     #Prompt 1
@@ -1168,6 +1169,7 @@ async def figma_custom_ui(item: Item):
     
     print(thread_id)
 
+    payload = "Generate logic code for every interactable element and modify the code. The output must be fully functional. Generate logic for the code by yourself don't expect from user. I had uploaded some common functionality steps in the file you can refer from there to create functionality logic for component of UI. No need to add any additional functionality into the code, generate functionality for elements that are already present in the ui."
     payload = "Generate logic code for every interactable element and modify the code. The output must be fully functional. Generate logic for the code by yourself don't expect from user. I had uploaded some common functionality steps in the file you can refer from there to create functionality logic for component of UI. No need to add any additional functionality into the code, generate functionality for elements that are already present in the ui."
     response_3 = get_response(thread_id,payload)
     print(response_3)
