@@ -845,26 +845,17 @@ async def identify_task(item: Item):
 
 @app.post("/task-priority/")
 async def task_priority(item: Item):
-    user_prompt = item.prompt
+    temp_data = json.loads(item.prompt)
+    user_prompt = temp_data["prompt"]
+    assistant_id = temp_data["assistant_id"]
+    thread_id = temp_data["thread_id"]
     user_data = item.data
     
-    json_obj_2 = json.loads(user_data)
-    json_obj_2
-    
-    # Serializing json
-    json_object = json.dumps(json_obj_2, indent=4)
-    
-    # Writing to sample.json
-    with open("sample.json", "w") as outfile:
-        outfile.write(json_object)
-        
-    openai_api_key = os.getenv('OPENAI_API_KEY')
-    print('Open ai api key: '+openai_api_key)
-    client = OpenAI(api_key=openai_api_key)
-    
-    def upload_file_to_assistant(filePath1):
+   
+    # uploading figma api data to vector store
+    def upload_file_to_vector_store(filePath1):
         # Create a vector store caled "Financial Statements"
-        vector_store = client.beta.vector_stores.create(name="Uploaded Files")
+        vector_store = client.beta.vector_stores.create(name="Document Files")
 
         # Ready the files for upload to OpenAI
         file_paths = [filePath1]
@@ -882,43 +873,77 @@ async def task_priority(item: Item):
         print(vector_store.id)
 
         return vector_store.id
-    
-    vector_id = upload_file_to_assistant("sample.json")
-    
-    prompt = f"Fetch Tasks for Today with the Following Criteria:\nPrimary Criteria:\nPriority is urgent and due date is today.\nSecondary Criteria if Primary is Not Met:\nIf there is no due date, check if the priority is urgent.\nIf there is no priority, check if the due date is today.\nIf there are no tasks due today, check for tasks due tomorrow or nearby dates with urgent priority.\nIf there is no priority, check for tasks with due dates in the near future.\nIf there is no due date and no priority, check for tasks whose content (name or description) contains words related to urgency like \"urgent,\" \"EOD,\" \"ASAP.\"\nAdditional Requirements:\nProvide a single external link related to the task content.\nInclude links to open the task, and details such as description, name, due date, and priority level.\nInclude links where available.\nVerify if tasks are completed by checking for user replies; exclude if replied to.\nPresentation Style:\nList tasks sequentially with serial numbers.\nInclude the app name as a parameter within each task's details.\nEnsure each task entry is concise and includes all necessary information without additional explanations.\nMake task details a bit detailed.\nmodify description parameter in such a way that it should tell the senders name as well like this sender is asking for that etc in the apps where there is name in the data , do not modify description for quire\nDo not seperate tasks by app names , instead add app name paramter in it and give bullet points to tasks"
-    print(prompt)
-    
-    assistant = client.beta.assistants.update(
-        assistant_id="asst_V16Ar6bvvgdREnsQCZPkibrO",
-        tool_resources={"file_search": {"vector_store_ids": [vector_id]}},
-        model="gpt-3.5-turbo-0125"
-    )
-    
-    def get_response():
-        count = 0
-        thread = client.beta.threads.create()
-        message = client.beta.threads.messages.create(
-            thread_id = thread.id,
-            role = "user",
-            content = prompt
+
+    def update_assistant(vectorId,assistantID):
+        assistant = client.beta.assistants.update(
+            assistant_id=assistantID,
+            tool_resources={"file_search": {"vector_store_ids": [vectorId]}},
         )
+        return assistant
+    
+    if assistant_id =="":
+        #Prompt2
+        my_assistant = client.beta.assistants.create(
+            instructions="You are Task Priority Assist, an AI assistant that will help user to find the  priority task and aslo assist with other task. Fetch tasks for given date based on the following criteria:\n\nPrimary Criteria:\n\nTasks with urgent priority and due today.\nSecondary Criteria (if primary is not met):\n\nTasks with no due date but urgent priority.\nTasks with no priority but due today.\nTasks not due today:\nCheck for tasks due tomorrow or soon with urgent priority.\nCheck for tasks due soon, regardless of priority.\nTasks with no due date and no priority:\nCheck for tasks with urgency-related keywords (\"urgent,\" \"EOD,\" \"ASAP\") in the name or description.\nAdditional Requirements:\n\nProvide one external link related to the task content.\nInclude links to open the task, and details such as description, name, due date, and priority.\nExclude tasks marked as completed based on user replies.\nPresentation Style:\n\nList tasks sequentially with serial numbers.\nInclude the app name in each task\'s details.\nEnsure each task entry is concise but detailed.\nModify the description to include the sender’s name where applicable (e.g., \"Sender requests...\").\nUse bullet points for tasks without separating by app names.",
+            name="Task Priority Assist",
+            tools=[{"type": "file_search"}],
+            model="gpt-4o",
+        )
+        print("New assistant is created: ",my_assistant)
+        assistant_id = my_assistant.id
+    else:
+        print("Assistant is already created")
+
+    if user_data != "":
+        user_json_obj = json.loads(user_data)
+        print(user_json_obj)
+        
+        with open('sample.json', 'w') as json_file:
+            json.dump(user_json_obj, json_file, indent=4) 
+            
+        vector_id = upload_file_to_vector_store("sample.json")
+        updated_assistant = update_assistant(vector_id,assistant_id)
+        print("New files are added: ",updated_assistant)
+        try:
+            os.remove("sample.json")
+            print("Files is deleted successfully ")
+        except:
+            print("Some error occurred while deleting the files")
+    else:
+        print("No need to add files to assistant")
+
+    if thread_id == "":
+        thread = client.beta.threads.create()
+        thread_id = thread.id
+        print("New thread is created: ",thread_id)
+    else:
+        print("No need to create a thread")
+    
+    def get_response(threadID,assistantID,payload):
+        message = client.beta.threads.messages.create(
+            thread_id = threadID,
+            role = "user",
+            content = payload
+        )
+        print(message)
         #run the assistant
         run = client.beta.threads.runs.create(
-            thread_id = thread.id,
-            assistant_id = 'asst_V16Ar6bvvgdREnsQCZPkibrO',
+            thread_id = threadID,
+            assistant_id = assistantID,
         )
+        print(run)
         # Waits for the run to be completed
         while True:
-            run_status = client.beta.threads.runs.retrieve(thread_id = thread.id, run_id = run.id)
+            run_status = client.beta.threads.runs.retrieve(thread_id = threadID, run_id = run.id)
             if run_status.status == "completed":
                 break
             elif run_status.status == "failed":
+                print("Run failed: ",run_status.last_error)
                 break
-            time.sleep(3) # wait for 2 seconds before checking 
-            
+
         if run_status.status == "completed":
             messages = client.beta.threads.messages.list(
-                thread_id = thread.id
+                thread_id = threadID
             )
 
             # Prints the messages with the latest message at the bottom
@@ -936,21 +961,20 @@ async def task_priority(item: Item):
             print("Something went wrong")
             response = 'Failed'
 
-        # Extract and print JSON
-        if response != 'Failed':
-            return response
-
-        else:
-            return "Failed"
-
-    get_updated_response = get_response()
-    print(get_updated_response)
-    if get_updated_response == "Failed":
-        return {"status":"failed"}
+        return response
     
-    response = {"status":"success","tasks":get_updated_response}
-    return response
+    response = get_response(thread_id,assistant_id,user_prompt)
+    print(response)
+    
+    if user_prompt != "":
+        response = get_response(thread_id,assistant_id,user_prompt)
 
+        if response == "Failed":
+            return {"status":"failed"}
+        return {"status":"success","assistant_id":assistant_id,"thread_id":thread_id,"response":response}
+    else:
+        return {"status":"failed","exception":"Prompt is not entered"}
+    
 @app.post("/figma-custom-ui/")
 async def figma_custom_ui(item: Item):
     api_data = item.data
