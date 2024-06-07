@@ -42,19 +42,30 @@ openai_api_key = os.getenv('OPENAI_API_KEY')
 print('Open ai api key: '+openai_api_key)
 client = OpenAI(api_key=openai_api_key)
 
-@app.post("/random-prompts/")
-async def random_prompts(item: Item):
-    data = json.loads(item.data)
-    print(data)
+def store_error(id,func_name,error):
+  url = 'http://35.85.112.192/api/ai-store-error'
+  # Define the headers
+  headers = {
+      'Accept': 'application/json',
+      'X-API-KEY': 'JGIp4AWFmI',
+      'Content-Type': 'application/json'
+  }
 
-    prompt = item.prompt
-    thread_id = data["thread_id"]
-    assistant_id = data["assistant_id"]
-    print("prompt: ",prompt)
-    print("thread_id: ",thread_id)
-    print("assistant_id: ",assistant_id)
-    
-    def get_response(threadID,assistantID,payload):
+  # Define the body
+  body = {
+      "user_id": id,
+      "data": [
+          {
+              "func_name": func_name,
+              "error": error
+          }
+      ]
+  }
+  # Make the POST request
+  response = requests.post(url, headers=headers, json=body)
+  return response
+
+def get_response(threadID,assistantID,payload):
         message = client.beta.threads.messages.create(
             thread_id = threadID,
             role = "user",
@@ -75,7 +86,7 @@ async def random_prompts(item: Item):
             elif run_status.status == "failed":
                 print("Run failed: ",run_status.last_error)
                 break
-
+                
         if run_status.status == "completed":
             messages = client.beta.threads.messages.list(
                 thread_id = threadID
@@ -95,6 +106,21 @@ async def random_prompts(item: Item):
             print("Something went wrong")
             response = 'Failed'
         return response
+
+@app.post("/random-prompts/")
+async def random_prompts(item: Item):
+    data = json.loads(item.data)
+    print(data)
+    
+    user_id = item.id
+    prompt = item.prompt
+    thread_id = data["thread_id"]
+    assistant_id = data["assistant_id"]
+    print("prompt: ",prompt)
+    print("thread_id: ",thread_id)
+    print("assistant_id: ",assistant_id)
+    
+    
     
     if thread_id == "" and assistant_id == "":
         assistant_name = data["assistant_name"]
@@ -123,7 +149,8 @@ async def random_prompts(item: Item):
         response = get_response(thread_id,assistant_id,curr_payload)
         print(response)
     
-    if response == "Failed":    
+    if response == "Failed":
+        store_error(user_id,"/random-prompts/","assistant api failed to generate response")    
         return {"status":"failed"}
     else:
         return  {"status":"success","response":response,"thread_id":thread_id,"assistant_id":assistant_id}
@@ -908,7 +935,9 @@ async def task_priority(item: Item):
             os.remove("sample.json")
             print("Files is deleted successfully ")
         except:
-            print("Some error occurred while deleting the files")
+            error="Some error occurred while deleting the files"
+            store_error(user_id,"/task-priority/",error)
+            print(error)
     else:
         print("No need to add files to assistant")
 
@@ -919,50 +948,6 @@ async def task_priority(item: Item):
     else:
         print("No need to create a thread")
     
-    def get_response(threadID,assistantID,payload):
-        message = client.beta.threads.messages.create(
-            thread_id = threadID,
-            role = "user",
-            content = payload
-        )
-        print(message)
-        #run the assistant
-        run = client.beta.threads.runs.create(
-            thread_id = threadID,
-            assistant_id = assistantID,
-        )
-        print(run)
-        # Waits for the run to be completed
-        while True:
-            run_status = client.beta.threads.runs.retrieve(thread_id = threadID, run_id = run.id)
-            if run_status.status == "completed":
-                break
-            elif run_status.status == "failed":
-                print("Run failed: ",run_status.last_error)
-                break
-
-        if run_status.status == "completed":
-            messages = client.beta.threads.messages.list(
-                thread_id = threadID
-            )
-
-            # Prints the messages with the latest message at the bottom
-            number_of_messages = len(messages.data)
-            print( f'Number of messages: {number_of_messages}')
-
-            for message in reversed(messages.data):
-                role = message.role
-                for content in message.content:
-                    if content.type == 'text':
-                        response = content.text.value
-                        print(f'\n{role}: {response}')
-
-        else:
-            print("Something went wrong")
-            response = 'Failed'
-
-        return response
-    
     response = get_response(thread_id,assistant_id,user_prompt)
     print(response)
     
@@ -970,9 +955,11 @@ async def task_priority(item: Item):
         response = get_response(thread_id,assistant_id,user_prompt)
 
         if response == "Failed":
+            store_error(user_id,"/task-priority/","assistant api failed to generate response")
             return {"status":"failed"}
         return {"status":"success","assistant_id":assistant_id,"thread_id":thread_id,"response":response}
     else:
+        store_error(user_id,"/task-priority/","Prompt is not entered")
         return {"status":"failed","exception":"Prompt is not entered"}
     
 @app.post("/figma-custom-ui/")
@@ -1111,52 +1098,10 @@ async def figma_custom_ui(item: Item):
     updated_assistant = update_assistant(vector_id)
     print(updated_assistant)
     
-    def get_response(threadID,payload):
-        message = client.beta.threads.messages.create(
-            thread_id = threadID,
-            role = "user",
-            content = payload
-        )
-        print(message)
-        #run the assistant
-        run = client.beta.threads.runs.create(
-            thread_id = thread.id,
-            assistant_id = assistant_id,
-        )
-        print(run)
-        # Waits for the run to be completed
-        while True:
-            run_status = client.beta.threads.runs.retrieve(thread_id = thread.id, run_id = run.id)
-            if run_status.status == "completed":
-                break
-            elif run_status.status == "failed":
-                print("Run failed: ",run_status.last_error)
-                break
-
-        if run_status.status == "completed":
-            messages = client.beta.threads.messages.list(
-                thread_id = thread.id
-            )
-
-            # Prints the messages with the latest message at the bottom
-            number_of_messages = len(messages.data)
-            print( f'Number of messages: {number_of_messages}')
-
-            for message in reversed(messages.data):
-                role = message.role
-                for content in message.content:
-                    if content.type == 'text':
-                        response = content.text.value
-                        print(f'\n{role}: {response}')
-
-        else:
-            print("Something went wrong")
-            response = 'Failed'
-
-        return response
-
+    
     payload = [{"type": "text", "text": f"Generate a {user_role} code for the figma UI based on UI image, figma styling data and  Description of the UI: \" {response_1} \"Make separate files for reusable components, classes and asssets"},{"type": "image_file","image_file": {"file_id": file_id}}]
-    response_2 = get_response(thread_id,payload)
+    store_error(user_id,"/figma-custom-ui/","assistant api failed to generate response")
+    response_2 = get_response(thread_id,assistant_id,payload)
     print(response_2)
 
     #deleting the uploaded image file
@@ -1193,7 +1138,7 @@ async def figma_custom_ui(item: Item):
     print(thread_id)
 
     payload = "Generate logic code for every interactable element and modify the code. The output must be fully functional. Generate logic for the code by yourself don't expect from user. I had uploaded some common functionality steps in the file you can refer from there to create functionality logic for component of UI. No need to add any additional functionality into the code, generate functionality for elements that are already present in the ui."
-    response_3 = get_response(thread_id,payload)
+    response_3 = get_response(thread_id,assistant_id,payload)
     print(response_3)
 
     deleted_image_file = delete_openai_files(image_file_id)
@@ -1212,6 +1157,7 @@ async def figma_custom_ui(item: Item):
     print(response)
     
     if response_3=="Failed":
+        store_error(user_id,"/figma-custom-ui/","assistant api failed to generate response")
         return {"status":"failed"}
     else:
         return {"status":"success","response":response_3}
@@ -1341,52 +1287,9 @@ async def new_functionalities(item: Item):
     updated_assistant = update_assistant(vector_id)
     print(updated_assistant)
     
-    def get_response(threadID,payload):
-        message = client.beta.threads.messages.create(
-            thread_id = threadID,
-            role = "user",
-            content = payload
-        )
-        print(message)
-        #run the assistant
-        run = client.beta.threads.runs.create(
-            thread_id = thread.id,
-            assistant_id = assistant_id,
-        )
-        print(run)
-        # Waits for the run to be completed
-        while True:
-            run_status = client.beta.threads.runs.retrieve(thread_id = thread.id, run_id = run.id)
-            if run_status.status == "completed":
-                break
-            elif run_status.status == "failed":
-                print("Run failed: ",run_status.last_error)
-                break
-
-        if run_status.status == "completed":
-            messages = client.beta.threads.messages.list(
-                thread_id = thread.id
-            )
-
-            # Prints the messages with the latest message at the bottom
-            number_of_messages = len(messages.data)
-            print( f'Number of messages: {number_of_messages}')
-
-            for message in reversed(messages.data):
-                role = message.role
-                for content in message.content:
-                    if content.type == 'text':
-                        response = content.text.value
-                        print(f'\n{role}: {response}')
-
-        else:
-            print("Something went wrong")
-            response = 'Failed'
-
-        return response
 
     payload = [{"type": "text", "text": f"Please modify the code inside the uploaded file to align with the design and layout specifications shown in the provided UI image. Ensure the following:\n\n1. Adapt the visual elements, colors, and layout as per the UI image.\n2. Verify that all interactive elements (buttons, forms, etc.) work correctly according to the new design.\n\nBelow is the functional description of the UI image {response_1}"},{"type": "image_file","image_file": {"file_id": file_id}}]
-    response_2 = get_response(thread_id,payload)
+    response_2 = get_response(thread_id,assistant_id,payload)
     
     print(response_2)
     
@@ -1408,6 +1311,7 @@ async def new_functionalities(item: Item):
     print(response)
     
     if response_2=="Failed":
+        store_error(user_id,"/new-functionalities/","assistant api failed to generate response")
         return {"status":"failed"}
     else:
         return {"status":"success","response":response_2}
@@ -1614,49 +1518,6 @@ async def multiple_files_flow(item: Item):
     else:
         print("Thread is already created: ",thread_id)
     
-    def get_response(threadID,payload):
-        message = client.beta.threads.messages.create(
-            thread_id = threadID,
-            role = "user",
-            content = payload
-        )
-        print(message)
-        #run the assistant
-        run = client.beta.threads.runs.create(
-            thread_id = threadID,
-            assistant_id = assistant_id
-        )
-        print(run)
-        # Waits for the run to be completed
-        while True:
-            run_status = client.beta.threads.runs.retrieve(thread_id = threadID, run_id = run.id)
-            if run_status.status == "completed":
-                break
-            elif run_status.status == "failed":
-                print("Run failed: ",run_status.last_error)
-                break
-
-        if run_status.status == "completed":
-            messages = client.beta.threads.messages.list(
-                thread_id = threadID
-            )
-
-            # Prints the messages with the latest message at the bottom
-            number_of_messages = len(messages.data)
-            print( f'Number of messages: {number_of_messages}')
-
-            for message in reversed(messages.data):
-                role = message.role
-                for content in message.content:
-                    if content.type == 'text':
-                        response = content.text.value
-                        print(f'\n{role}: {response}')
-
-        else:
-            print("Something went wrong")
-            response = 'Failed'
-
-        return response
     
     # uploading ui image to open ai
     def upload_image_file_to_openai(filepath):
@@ -1683,15 +1544,138 @@ async def multiple_files_flow(item: Item):
         print("Image was successfully uploaded to open ai: ",image_id)
 
         payload = [{"type": "text", "text": prompt},{"type": "image_file","image_file": {"file_id": image_id}}]
-        response = get_response(thread_id,payload)
+        response = get_response(thread_id,assistant_id,payload)
         print(response)
 
     else:
         payload = prompt
-        response = get_response(thread_id,payload)
+        response = get_response(thread_id,assistant_id,payload)
         print(response)   
             
     return {"status ":"success","assistant_id":assistant_id,"thread_id":thread_id, "response":response}
+
+@app.post("/analyze-files/")
+async def analyze_files(item: Item):
+    api_data=item.data
+    print(api_data)
+
+    api_data_json = json.loads(api_data)
+    print(api_data_json)
+
+    #Prompt2
+    my_assistant = client.beta.assistants.create(
+        instructions="You are an AI assistant that helps in indexing source code files for better understanding and quick navigation. For the given file content, provide a structured detailed summary and logics in JSON format that includes the following:\n{\n  \"file_path\": \"<file_path>\",\n  \"overview\": \"detailed overview of the file.\",\n  \"classes\": [\n    {\n      \"name\": \"ClassName\",\n      \"description\": \"detailed description of the class.\"\n    }\n  ],\n  \"functions\": [\n    {\n      \"name\": \"FunctionName\",\n      \"description\": \"detail description of the function  and logic in each.\",\n      \"parameters\": [\"param1\", \"param2\"],\n      \"returns\": \"Description of the return value.\"\n    }\n  ],\n  \"variables\": [\n    {\n      \"name\": \"VariableName\",\n      \"description\": \"Brief description of the variable.\"\n    }\n  ],\n  \"comments\": [\n    {\n      \"line\": LineNumber,\n      \"content\": \"Content of the comment.\"\n    }\n  ]\n}\n\nFile Content:\n<file content>\n\nProvide the detailed structured summary and logic overview in the JSON format as shown above:",
+        name="AI Assistant",
+        tools=[{"type": "file_search"}],
+        model="gpt-4o",
+    )
+    print(my_assistant)
+    
+    assistant_id  = my_assistant.id
+    print(assistant_id)
+
+    def get_file_name(file_path):
+            # Normalize the path to handle backslashes
+            normalized_path = file_path.replace('\\', '/')
+            return os.path.basename(normalized_path)
+
+    def write_code_to_file(filename: str, code: str) -> None:
+            with open(filename, 'w') as file:
+                file.write(code)
+
+    def remove_extension(filename: str) -> str:
+            # Split the filename into name and extension
+            name = filename.rsplit('.', 1)[0]
+            return name
+
+    uploaded_file_ids=[]
+
+    def upload_file_to_vector_store(file_name,vector_id):
+        file = client.files.create(
+            file=open(file_name, "rb"),
+            purpose="assistants"
+        )
+        file_id = file.id
+        uploaded_file_ids.append(file_id)
+
+        vector_store_file = client.beta.vector_stores.files.create(
+            vector_store_id=vector_id,
+            file_id=file_id
+        )
+        print(file_name + " was successfully stored")
+        print(vector_store_file)
+
+    multiple_file_name = []
+    for item in api_data_json:
+        code = item['content']
+        filename = remove_extension(get_file_name(item['file_path'])) + '.txt'
+        print(filename)
+        multiple_file_name.append(filename)
+        write_code_to_file(filename, code)
+        print(f"Code written to {filename}")
+        
+    print(multiple_file_name)
+
+    store_name = "Uploaded files to Store"
+    vector_store = client.beta.vector_stores.create(
+        name=store_name
+    )
+
+    print(vector_store)
+    vector_id = vector_store.id
+
+    for files in multiple_file_name:
+        upload_file_to_vector_store(files,vector_id)
+
+    print(str(len(multiple_file_name))+" was successfully uploaded to vector store "+store_name)
+
+    assistant = client.beta.assistants.update(
+        assistant_id=assistant_id,
+        tool_resources={"file_search": {"vector_store_ids": [vector_id]}},
+    )
+    print("updated assistant: ",assistant)
+
+    def delete_files_by_name(directory, filenames):
+        for filename in filenames:
+            file_path = os.path.join(directory, filename)
+            try:
+                if os.path.isfile(file_path):
+                    os.remove(file_path)
+                    print(f"Deleted file: {file_path}")
+                else:
+                    print(f"File not found: {file_path}")
+            except Exception as e:
+                print(f"Error deleting file {file_path}: {e}")
+
+    directory = './'
+    delete_files_by_name(directory, multiple_file_name)
+
+    empty_thread = client.beta.threads.create()
+    print(empty_thread)
+    thread_id = empty_thread.id
+
+    payload = "Index the uploaded source files"
+    response_2 = get_response(thread_id,assistant_id,payload)
+    print(response_2)
+
+    #deleting the uploaded image file
+    def delete_openai_files(file_id):
+        deleted_image_file = client.files.delete(file_id)
+        return deleted_image_file
+
+    for ids in uploaded_file_ids:
+        msg=delete_openai_files(ids)
+        print(msg)
+
+    deleted_vector_store = client.beta.vector_stores.delete(
+        vector_store_id=vector_id
+        )
+    print(deleted_vector_store)
+
+    response = client.beta.assistants.delete(assistant_id)
+    print(response)
+    
+    return {"status":"success","response":response_2}
 
 async def stream_response():
     
