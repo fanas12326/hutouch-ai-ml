@@ -16,7 +16,6 @@ from datetime import datetime
 import requests
 import httpx  # HTTP client for making requests
 import copy
-import base64
 from token_count import TokenCount
 from openai import OpenAI
 from collections import Counter
@@ -27,7 +26,6 @@ from PIL import Image
 from io import BytesIO
 import spacy
 import asyncio
-import shutil
 from fastapi.responses import StreamingResponse
 from typing import AsyncGenerator
 
@@ -44,74 +42,8 @@ openai_api_key = os.getenv('OPENAI_API_KEY')
 print('Open ai api key: '+openai_api_key)
 client = OpenAI(api_key=openai_api_key)
 
-
-def create_user_directory(user_id):
-  try:
-    path = f"./users_temp_data/user_{str(user_id)}"
-    os.makedirs(path)
-    print(f"Folder {path} created successfully")
-    return path
-  except FileExistsError:
-    print(f"Folder '{path}' already exists.")
-    path = f"./users_temp_data/user_{str(user_id)}"
-    return path
-  except Exception as e:
-        print(f"An error occurred: {e}")
-        return ""
-
-def delete_folder_recursive(path):
-    try:
-        shutil.rmtree(path)
-        print(f"Folder '{path}' and all its contents deleted successfully.")
-    except FileNotFoundError:
-        print(f"Folder '{path}' does not exist.")
-    except Exception as e:
-        print(f"An error occurred: {e}")
-
-def get_project_data(user_id):
-  api_url = f'http://35.85.112.192/api/get-project-data/{user_id}'
-
-  # Define the headers
-  headers = {
-      'Accept': 'application/json',
-      'X-API-KEY': 'JGIp4AWFmI',
-      'Content-Type': 'application/json'
-  }
-
-  # Make the GET request
-  response = requests.get(api_url, headers=headers)
-
-  # Check if the request was successful
-  if response.status_code == 200:
-      # Parse the JSON response
-      data = response.json()
-      # print(data)
-      return {"status":"success","data":data}
-  else:
-      print(f"Failed to retrieve data: {response.status_code} - {response.text}")
-      return {"status":"failed"}
-
-def store_project_data_locally(user_id,dir_path):
-  project_data = get_project_data(user_id)
-
-  if project_data["status"]=="success":
-    print("Data is successfully retrieved")
-    print(project_data["data"]["data"]["user_nature"])
-    print(type(project_data["data"]["data"]["user_nature"]))
-    try:
-      with open(dir_path+"/project_style_data.json", 'w') as file:
-        data = json.loads(project_data["data"]["data"]["user_nature"])
-        json.dump(data, file)
-        return {"status":"success"}
-    except:
-      print("error while creating the file")
-      return {"status":"failed"}
-  else:
-    print("Failed to retrieve data")
-    return {"status":"failed"}
-
 def store_error(id,func_name,error):
-  url = 'http://35.85.112.192/api/ai-store-error'   
+  url = 'http://35.85.112.192/api/ai-store-error'
   # Define the headers
   headers = {
       'Accept': 'application/json',
@@ -939,17 +871,13 @@ async def identify_task(item: Item):
 
 @app.post("/task-priority/")
 async def task_priority(item: Item):
-    user_id = item.id
     temp_data = json.loads(item.prompt)
     user_prompt = temp_data["prompt"]
     assistant_id = temp_data["assistant_id"]
-    mode = temp_data["mode"]
     thread_id = temp_data["thread_id"]
     user_data = item.data
     
-    dir_path = create_user_directory(user_id)
-    print(dir_path)
-    
+   
     # uploading figma api data to vector store
     def upload_file_to_vector_store(filePath1):
         # Create a vector store caled "Financial Statements"
@@ -982,7 +910,7 @@ async def task_priority(item: Item):
     if assistant_id =="":
         #Prompt2
         my_assistant = client.beta.assistants.create(
-            instructions="You are Task Priority Assist, an AI assistant that will help user to find the priority task.",
+            instructions="You are Task Priority Assist, an AI assistant that will help user to find the  priority task and aslo assist with other task. Fetch tasks for given date based on the following criteria:\n\nPrimary Criteria:\n\nTasks with urgent priority and due today.\nSecondary Criteria (if primary is not met):\n\nTasks with no due date but urgent priority.\nTasks with no priority but due today.\nTasks not due today:\nCheck for tasks due tomorrow or soon with urgent priority.\nCheck for tasks due soon, regardless of priority.\nTasks with no due date and no priority:\nCheck for tasks with urgency-related keywords (\"urgent,\" \"EOD,\" \"ASAP\") in the name or description.\nAdditional Requirements:\n\nProvide one external link related to the task content.\nInclude links to open the task, and details such as description, name, due date, and priority.\nExclude tasks marked as completed based on user replies.\nPresentation Style:\n\nList tasks sequentially with serial numbers.\nInclude the app name in each task\'s details.\nEnsure each task entry is concise but detailed.\nModify the description to include the sender’s name where applicable (e.g., \"Sender requests...\").\nUse bullet points for tasks without separating by app names.",
             name="Task Priority Assist",
             tools=[{"type": "file_search"}],
             model="gpt-4o",
@@ -991,26 +919,24 @@ async def task_priority(item: Item):
         assistant_id = my_assistant.id
     else:
         print("Assistant is already created")
-    
-    file_path = dir_path + "/sample.json"
+
     if user_data != "":
         user_json_obj = json.loads(user_data)
         print(user_json_obj)
         
-        with open(file_path, 'w') as json_file:
+        with open('sample.json', 'w') as json_file:
             json.dump(user_json_obj, json_file, indent=4) 
             
-        vector_id = upload_file_to_vector_store(file_path)
+        vector_id = upload_file_to_vector_store("sample.json")
         updated_assistant = update_assistant(vector_id,assistant_id)
         print("New files are added: ",updated_assistant)
         try:
-            if os.path.isfile(file_path):
-                os.remove(file_path)
-                print(f"Deleted file: {file_path}")
-            else:
-                print(f"File not found: {file_path}")
-        except Exception as e:
-            print(f"Error deleting file {file_path}: {e}")
+            os.remove("sample.json")
+            print("Files is deleted successfully ")
+        except:
+            error="Some error occurred while deleting the files"
+            store_error(user_id,"/task-priority/",error)
+            print(error)
     else:
         print("No need to add files to assistant")
 
@@ -1024,48 +950,13 @@ async def task_priority(item: Item):
     response = get_response(thread_id,assistant_id,user_prompt)
     print(response)
     
-    def update_assistant(instruct):
-        assistant = client.beta.assistants.update(
-            assistant_id=assistant_id,
-            instructions=instruct
-        )   
-        return assistant
-    
     if user_prompt != "":
-        if mode == "meet":
-            inst = f"You are Task Priority Assist, an AI assistant that will fetch the meetings for the asked date. Format the response as follows:\n\nTitle: [Title of the meeting]\nDescription: [Description of the meeting (if provided, otherwise exclude this line)]\nTime: [Date and time of the meeting]\nRequirements for the meeting: [Details about what is required or the purpose of the meeting]\nLink: [Link to the meeting (if provided, otherwise exclude this line)]"
-            updated_assistant = update_assistant(inst)
-            print("updated_assistant: ",updated_assistant)
-        else:
-            inst = "You are Task Priority Assist, an AI assistant that will help user to find the priority task."
-            updated_assistant = update_assistant(inst)
-            print("updated_assistant: ",updated_assistant)
-        
-        if mode == "meet":     
-            response = get_response(thread_id,assistant_id,user_prompt)
-        else:
-            prompt_1 = "Given the task data, structure each task with the following details one below the other:\n Title, Description : Summarize the description in short, Source : App name, Due date, Link to open task : Add the URL from the data."
-            response_1 = get_response(thread_id,assistant_id,prompt_1)
-            print(response_1)
-            
-            prompt_2 = "Only show tasks that have not been marked as completed, dev complete, test complete etc or the messages which contains tasks and does not have any replies indicating the completion of tasks."
-            response_2 = get_response(thread_id,assistant_id,prompt_2)
-            print(response_2)
-            
-            prompt_3 = "User's Prompt - "+ user_prompt + "\n Filter the tasks to display only those that have the due date specified in the user's prompt and priority is urgent or high, along with any overdue tasks.\n If no due date is found for any task, check the priority level. If no priority is found, then check the due date. \n If two or fewer tasks are found, include tasks from the next day or the next week or the tasks which do not have any due date or priority mentioned."
-            response_3 = get_response(thread_id,assistant_id,prompt_2)
-            print(response_3)
-            
-            response = response_3
-        
-        delete_folder_recursive(dir_path)
-            
-        helping_data = {"prompt":user_prompt,"mode":mode,"api_data":json.dumps(user_data,indent=4,ensure_ascii=False)}
-    
+        response = get_response(thread_id,assistant_id,user_prompt)
+
         if response == "Failed":
             store_error(user_id,"/task-priority/","assistant api failed to generate response")
-            return {"status":"failed","data":json.dumps(helping_data,indent=4,ensure_ascii=False)}
-        return {"status":"success","assistant_id":assistant_id,"thread_id":thread_id,"response":response,"data":json.dumps(helping_data,indent=4,ensure_ascii=False)}
+            return {"status":"failed"}
+        return {"status":"success","assistant_id":assistant_id,"thread_id":thread_id,"response":response}
     else:
         store_error(user_id,"/task-priority/","Prompt is not entered")
         return {"status":"failed","exception":"Prompt is not entered"}
@@ -1078,8 +969,7 @@ async def figma_custom_ui(item: Item):
     api_data = temp_api_data["figma_data"]
     
     added_requirements = temp_api_data["added_requirements"]
-    
-    
+     
     temp_data = item.prompt
     data_json_obj = json.loads(temp_data)
     print(data_json_obj)
@@ -1090,9 +980,6 @@ async def figma_custom_ui(item: Item):
     print(image_url)
     api_json_data = json.loads(api_data)
     print(api_json_data)
-    
-    dir_path = create_user_directory(user_id)
-    print(dir_path)
     
     openai_api_key = os.getenv('OPENAI_API_KEY')
     print('Open ai api key: '+openai_api_key)
@@ -1126,8 +1013,6 @@ async def figma_custom_ui(item: Item):
     response_1 = response.choices[0].message.content
     print(response_1)
 
-    
-         
     #Prompt2
     my_assistant = client.beta.assistants.create(
         instructions="You are an helpful assistant",
@@ -1137,28 +1022,48 @@ async def figma_custom_ui(item: Item):
     )
     print(my_assistant)
 
+    # # Download the image
+    # response = requests.get(image_url)
+    # if response.status_code == 200:
+    #     # Open the image using Pillow
+    #     image = Image.open(BytesIO(response.content))
+
+    #     # Convert and save the image as PNG
+    #     image.save("output.png", format="PNG")
+    #     print("Image saved as output.png")
+    # else:
+    #     print("Failed to retrieve the image")
+
+    # # uploading ui image to open ai
+    # def upload_image_file_to_openai(filepath):
+    #     uploaded_file = client.files.create(
+    #         file=open(filepath, "rb"),
+    #         purpose="vision"
+    #     )
+    #     return uploaded_file.id
+    
+    # uploading ui image to open ai
     def upload_document_file_to_openai(filepath):
         uploaded_file = client.files.create(
             file=open(filepath, "rb"),
             purpose="assistants"
         )
         return uploaded_file.id
+
+    # file_id = upload_image_file_to_openai("output.png")
+    # print(file_id)
+
+    # image_file_id = file_id
     
-    # api_converted_data = get_analyzed_api_data(api_data,image_url)
+    api_converted_data = get_analyzed_api_data(api_data,image_url)
     # Specify the filename
-    # filename = 'figma_data_file.txt'
+    filename = 'figma_data_file.txt'
 
     # Writing JSON data to a file
-    # with open(filename, 'w') as file:
-    #     json.dump(api_converted_data, file)
-    
-    if api_data != "":
-        try:
-            with open(dir_path+"/figma_data_file.json", 'w') as file:
-                json.dump(json.loads(api_data), file)
-                print("API JSON data was successfully written to file")
-        except:
-            print("Some error occured while uploadng the data")
+    with open(filename, 'w') as file:
+        json.dump(api_converted_data, file)
+
+    print(f"JSON data has been written to {filename}")
 
     # uploading figma api data to vector store
     def upload_file_to_vector_store(filePath1,filePath2):
@@ -1187,11 +1092,11 @@ async def figma_custom_ui(item: Item):
         return vector_store.id
     
     if added_requirements != "":
-        write_code_to_file(dir_path+"/More requirements.txt",added_requirements)
+        write_code_to_file("More requirements.txt",added_requirements)
         print("More requirements was successfully made")
-        vector_id = upload_file_to_vector_store(dir_path+"/figma_data_file.json",dir_path+"/More requirements.txt")
+        vector_id = upload_file_to_vector_store("figma_data_file.json","More requirements.txt")
     else:
-        vector_id = upload_file_to_vector_store(dir_path+"/figma_data_file.json","")
+        vector_id = upload_file_to_vector_store("figma_data_file.json","")
 
     assistant_id = my_assistant.id
     # print("file_id: ",file_id)
@@ -1202,27 +1107,6 @@ async def figma_custom_ui(item: Item):
     thread_id = thread.id
     print(thread_id)
 
-    #storing the user styles data files
-    status_project_code = store_project_data_locally(user_id,dir_path)
-    
-    styles_id = ""
-    if status_project_code["status"] == "success":
-        print("Uploading the styles file to vector store")
-        created_file = client.files.create(
-            file=open(dir_path+"/project_style_data.json", "rb"),
-            purpose="assistants"
-        )
-        print("created_file: ",created_file)
-        
-        styles_id = created_file.id
-        
-        vector_store_file = client.beta.vector_stores.files.create(
-            vector_store_id=vector_id,
-            file_id=styles_id
-        )
-        print(vector_store_file)
-        print("File was successfully uploaded")
-        
     def update_assistant(vectorId):
         assistant = client.beta.assistants.update(
             assistant_id=assistant_id,
@@ -1233,39 +1117,10 @@ async def figma_custom_ui(item: Item):
     updated_assistant = update_assistant(vector_id)
     print(updated_assistant)
     
-    figma_info = "absoluteBoundingBox: Describes the absolute position and size of the element in the frame, here position is given in the form  of x and y coordinated with respect to the screen, so place the components at proper positions"
-    if user_role == "Flutter Developer 2":
-        print("In flutter dev prompt mode")
-        payload = [
-            {
-                "type": "text",
-                "text": f"Generate a {user_role} code with MVC architecture and proper State Management for the figma UI based on UI image, figma styling data(note: figma data is uploaded in figma_data_file.json file) and  Description of the UI: \" {response_1} \".\nMake separate files for reusable components, classes, and assets. Also maintain Colors and Strings as a reusable component. \n Some information about figma data is: \n  Note: The colors in figma API data is in the form of RGBA format so add accurate colors in code \n{figma_info} \n Ensure the code includes: 1. Proper error handling for each code file and method. 2. Proper commenting so that every non-coder can also understand the code. 3. Provide only the exact code with file and folder names. No need to generate code for Status bar showing battery, time, etc."
-            },
-            {
-                "type": "image_url",
-                "image_url": {"url": image_url}
-            }
-        ]
-    else:
-        print("Not in Flutter Dev Mode")
-        if status_project_code["status"] == "success":
-            print("Using the styles data")
-            styles_prompt = "User coding styles data is present in project_style_data.json, create response according to it. Here is the short general description of how coding style would be: * architecture_used: Details use of an architectural pattern like MVC or MVVM, with clear separation of concerns for maintainability.\n\n* state_management: Highlights use of state management, evidenced by related classes/functions for managing and updating application state reactively.\n\n* naming_conventions: Describes naming styles. Classes use CamelCase (e.g., NextButton), while variables and functions use camelCase (e.g., selectedLanguage).\n\n* commenting_style: Indicates the approach to comments. Sparse, with occasional inline comments; some files may lack comments.\n\n* code_structure: Explains project organization into directories by concern (e.g., utils, components, modules) and use of classes/functions for different parts of the application.\n\n* specific_patterns: Identifies common patterns, such as using a state management library, constants for strings and paths, and utility classes for common functions.\n\n* error_handling: Describes the approach to handling errors, mainly using utility functions for error messages or exceptions; extensive handling may not be present.\n\n* indentation_style: Specifies indentation style, usually 2 spaces per level, using spaces instead of tabs.\n\n* libraries_frameworks: Lists primary libraries and frameworks used, which vary by tech stack (e.g., React, Angular, Vue for UI; Redux, MobX for state management).\n\n* overall_coding_habits: Describes coding habits, such as organizing code into modules, preferring a declarative style, using a specific state management library, and maintaining consistent structure for components."
-            payload = [
-                {
-                    "type": "text",
-                    "text": f"Generate a {user_role} code with architecture and state management given in \"project_style_data.json\" for the figma UI based on UI image, figma styling data (note: figma data is uploaded in figma_data_file.json file) and Description of the UI: \" {response_1} \".\nMake separate files for reusable components, classes, and assets.\n Some information about figma data is: \n Note: The colors in figma API data are in the form of RGBA format so add accurate colors in code \n{figma_info} \n {styles_prompt}\n Ensure the code includes: 1. Proper error handling for each code file and method. 2. Proper commenting so that every non-coder can also understand the code. 3. Provide only the exact code with file and folder names. No need to generate code for Status bar showing battery, time, etc."
-                },
-                {
-                    "type": "image_url",
-                    "image_url": {"url": image_url}
-                }
-            ]
-        else:
-            print("Not using the styles data")
-            payload = [{"type": "text", "text": f"Generate a {user_role} code for the figma UI based on UI image, figma styling data(note: figma data is uploaded in figma_data_file.json file) and  Description of the UI: \" {response_1} \".\nMake separate files for reusable components, classes and asssets.\n Some information about figma data is: \n  Note: The colors in figma api data is in the form of RGBA fromat so make so add accurate colors in code \n{figma_info} \n Ensure the code includes: 1. Proper error handling for each code file and method. 2. Proper commenting so that every non-coder can also understand the code. 3. Provide only the exact code with file and folder names. No need to generate code for Status bar showing battery, time, etc."},{"type": "image_url","image_url": {"url": image_url}}]
+    figma_info = "1. document object:\n   - blendMode: Blend mode used for the layer (e.g., PASS_THROUGH).\n   - background: Background properties of the frame or component.\n   - children: A list of child objects or layers contained within the frame, each with its own set of properties similar to the document object.\n\n2. Child Element Properties:\n   - absoluteBoundingBox: Describes the absolute position and size of the element in the frame.\n   - constraints: Defines how the element is fixed within the parent frame upon resizing.\n   - fills: Describes the fill properties (e.g., color, type) applied to the element.\n   - strokes: Describes the stroke properties applied to the borders of the element.\n   - strokeWeight: Thickness of the stroke on the element\'s border.\n   - strokeAlign: Alignment of the stroke on the element\'s border.\n   - effects: Lists visual effects applied to the element, like shadows or blurs.\n   - cornerRadius: Specifies the radius for rounded corners on the element.\n   - cornerSmoothing: Degree of smoothing applied to the corners of the element.\n\n3. Styles Reference:\n   - key: Unique identifier for the style.\n   - name: Name of the style.\n   - styleType: Type of style (e.g., FILL, TEXT).\n   - remote: Indicates if the style is defined locally or accessed remotely.\n   - description: Description of what the style entails or is used for."
+    payload = [{"type": "text", "text": f"Generate a {user_role} code for the figma UI based on UI image, figma styling data(note: figma data is uploaded in figma_data_file.txt file) and  Description of the UI: \" {response_1} \".\nMake separate files for reusable components, classes and asssets.\n Some information about figma data is: \n  Note: The colors in figma api data is in the form of RGBA fromat so make so add accurate colors in code \n{figma_info}"},{"type": "image_url","image_url": {"url": image_url}}]
     # payload = [{"type": "text", "text": f"Generate a {user_role} code for the figma UI based on UI image, figma styling data(note: figma data is uploaded in figma_data_file.json file)\".\nMake separate files for reusable components, classes and asssets.\n Some information about figma data is: \n  Note: The colors in figma api data is in the form of RGBA fromat so make so add accurate colors in code \n{figma_info}"},{"type": "image_url","image_url": {"url": image_url}}]
-    # store_error(user_id,"/figma-custom-ui/","assistant api failed to generate response")
+    store_error(user_id,"/figma-custom-ui/","assistant api failed to generate response")
     response_2 = get_response(thread_id,assistant_id,payload)
     print(response_2)
 
@@ -1303,33 +1158,30 @@ async def figma_custom_ui(item: Item):
     print(thread_id)
 
     if added_requirements=="":
-        payload = [{"type": "text", "text": f"Generate logic code for every interactable element and modify the code. The output must be fully functional. Generate logic for the code by yourself don't expect from user. I had uploaded some common functionality steps in the file you can refer from there to create functionality logic for component of UI. No need to add any additional functionality into the code, generate functionality for elements that are already present in the ui. Also see the uploaded ui image and correct the position of any component which is wrong. \n Ensure the code includes: 1. Proper error handling for each code file and method. 2. Proper commenting so that every non-coder can also understand the code. 3. Provide only the exact code with file and folder names 4. No need to generate code for Status bar showing battery, time, etc."},{"type": "image_url","image_url": {"url": image_url}}]
+        payload = "Generate logic code for every interactable element and modify the code. The output must be fully functional. Generate logic for the code by yourself don't expect from user. I had uploaded some common functionality steps in the file you can refer from there to create functionality logic for component of UI. No need to add any additional functionality into the code, generate functionality for elements that are already present in the ui."
         print("Generating prompt 3 normally")
     else:
-        payload = [{"type": "text", "text": f"Generate logic code for every interactable element and modify the code. The output must be fully functional. Generate logic for the code by yourself don't expect from user. I had uploaded some common functionality steps in the Common_Functionality.json and also some specific requirements in More requirements.txt file you can refer from there to create functionality logic for component of UI. No need to add any additional functionality into the code, generate functionality for elements that are already present in the ui. Also see the uploaded ui image and correct the position of any component which is wrong. \n Ensure the code includes: 1. Proper error handling for each code file and method. 2. Proper commenting so that every non-coder can also understand the code. 3. Provide only the exact code with file and folder names 4. No need to generate code for Status bar showing battery, time, etc."},{"type": "image_url","image_url": {"url": image_url}}]
+        payload = "Generate logic code for every interactable element and modify the code. The output must be fully functional. Generate logic for the code by yourself don't expect from user. I had uploaded some common functionality steps in the Common_Functionality.json and also some specific requirements in More requirements.txt file you can refer from there to create functionality logic for component of UI. No need to add any additional functionality into the code, generate functionality for elements that are already present in the ui."
         print("Generating prompt 3 for ui image")
     response_3 = get_response(thread_id,assistant_id,payload)
     print(response_3)
 
-    def remove_locally_stored_files(file_path):
-        try:
-            if os.path.isfile(file_path):
-                os.remove(file_path)
-                print(f"Deleted file: {file_path}")
-            else:
-                print(f"File not found: {file_path}")
-        except Exception as e:
-            print(f"Error deleting file {file_path}: {e}")
+    
+    file_path = os.path.join("./", "More requirements.txt")
+    try:
+        if os.path.isfile(file_path):
+            os.remove(file_path)
+            print(f"Deleted file: {file_path}")
+        else:
+            print(f"File not found: {file_path}")
+    except Exception as e:
+        print(f"Error deleting file {file_path}: {e}")
         
-    remove_locally_stored_files(dir_path+"/More requirements.txt")
-    remove_locally_stored_files(dir_path+"/figma_data_file.json")
-        
+    # deleted_image_file = delete_openai_files(image_file_id)
+    # print(deleted_image_file)
+    
     deleted_document_file = delete_openai_files(file_id)
     print(deleted_document_file)
-    
-    if styles_id!="":
-        deleted_document_file = client.files.delete(styles_id)
-        print(deleted_document_file)
     
     #deleting the uploaded vector, so that i can create a new one
     deleted_vector_store = client.beta.vector_stores.delete(
@@ -1340,15 +1192,11 @@ async def figma_custom_ui(item: Item):
     response = client.beta.assistants.delete(assistant_id)
     print(response)
     
-    helping_data = {"figma_data":api_data,"user_requirements_data":added_requirements}
-    
-    delete_folder_recursive(dir_path)
-    
     if response_3=="Failed":
         store_error(user_id,"/figma-custom-ui/","assistant api failed to generate response")
-        return {"status":"failed","data":json.dumps(helping_data,indent=4,ensure_ascii=False)}
+        return {"status":"failed"}
     else:
-        return {"status":"success","response":response_3,"data":json.dumps(helping_data,indent=4,ensure_ascii=False)}
+        return {"status":"success","response":response_3}
 
     
 @app.post("/new-functionalities/")
@@ -1562,7 +1410,7 @@ async def detect_file_name(item: Item):
 @app.post("/multiple-files-flow/")
 async def multiple_files_flow(item: Item):
     # 3 use cases: Update functionality, add new functionality, add new screen
-    user_id = item.id
+    
     temp_data = json.loads(item.prompt)
     temp_api_data = json.loads(item.data)
     
@@ -1584,11 +1432,10 @@ async def multiple_files_flow(item: Item):
     print("thread_id: ", thread_id)
     print("additional_requirements: ",additional_requirements)
     print("api_data: ",api_data)
-    print("figma_api_data: ",figma_api_data)    
+    print("figma_api_data: ",figma_api_data)
     
-    dir_path = create_user_directory(user_id)
-    print(dir_path)
-            
+     
+        
     if not assistant_id:
         completion = client.chat.completions.create(
             model="gpt-3.5-turbo",
@@ -1600,7 +1447,6 @@ async def multiple_files_flow(item: Item):
         role_description = completion.choices[0].message.content
         print(role_description)
 
-        
         my_assistant = client.beta.assistants.create(
             instructions=f"{role_description}\nGenerate {user_role} code based on user prompt.\nRemember:\n1. Generate output by studying the uploaded files\n2. Uploaded  Readme.txt contain the proper files and folder structure\n3. Link the output to existing project files\n4. Generate code with proper file and folder name",
             name=f"{user_role} Code Assist",
@@ -1660,13 +1506,12 @@ async def multiple_files_flow(item: Item):
     except ValueError as e:
         print("Invalid JSON: ", e)
 
-    
     if isValid:
         multiple_file_name = []
         uploaded_file_ids = []
         for item in api_data_json:
             code = item['content']
-            filename = dir_path+'/'+remove_extension(item['file_path']) + '.txt'
+            filename = remove_extension(item['file_path']) + '.txt'
             multiple_file_name.append(filename)
             write_code_to_file(filename, code)
             print(f"Code written to {filename}")
@@ -1682,19 +1527,12 @@ async def multiple_files_flow(item: Item):
         # uploaded_file_ids.append(file_id)
         print("Common Functionality file was successfully uploaded")
         
-        #storing the user styles data files
-        status_project_code = store_project_data_locally(user_id,dir_path)
-        styles_id = ""
-        if status_project_code["status"] == "success":
-            print("Uploading the styles file to vector store")
-            upload_file_to_vector_store(dir_path+"/project_style_data.json",vector_id)
-        
         #creating and uploading the additional functionality file to the
         if additional_requirements!="":
             try:
-                write_code_to_file(dir_path+"/More requirements.txt",additional_requirements)
-                upload_file_to_vector_store(dir_path+"/More requirements.txt",vector_id)
-                multiple_file_name.append(dir_path+"/More requirements.txt")
+                write_code_to_file("More requirements.txt",additional_requirements)
+                upload_file_to_vector_store("More requirements.txt",vector_id)
+                multiple_file_name.append("More requirements.txt")
                 print("More requirements file was successully uploaded")
             except:
                 print("Error uploading more requirements file")
@@ -1705,12 +1543,28 @@ async def multiple_files_flow(item: Item):
         )
         print("updated assistant: ", assistant)
 
+        def delete_files_by_name(directory, filenames):
+            for filename in filenames:
+                file_path = os.path.join(directory, filename)
+                try:
+                    if os.path.isfile(file_path):
+                        os.remove(file_path)
+                        print(f"Deleted file: {file_path}")
+                    else:
+                        print(f"File not found: {file_path}")
+                except Exception as e:
+                    print(f"Error deleting file {file_path}: {e}")
+
+        directory = './'
+        # Adding a delay to ensure files are not in use
+        time.sleep(1)
+        delete_files_by_name(directory, multiple_file_name)
     else:
         print("No files uploaded")
         if additional_requirements != "":
             try:
-                write_code_to_file(dir_path + "/More requirements.txt",additional_requirements)
-                upload_file_to_vector_store(dir_path + "/More requirements.txt",vector_id)
+                write_code_to_file("More requirements.txt",additional_requirements)
+                upload_file_to_vector_store("More requirements.txt",vector_id)
                 # multiple_file_name.append("More requirements.txt")
                 print("More requirements file was successully uploaded")
                 assistant = client.beta.assistants.update(
@@ -1719,7 +1573,9 @@ async def multiple_files_flow(item: Item):
                 )
                 print("updated assistant: ", assistant)
             except:
-                print("Error uploading more requirements file")        
+                print("Error uploading more requirements file")
+        
+        
 
     if not thread_id:
         empty_thread = client.beta.threads.create()
@@ -1735,16 +1591,10 @@ async def multiple_files_flow(item: Item):
     ###############################################################
     if figma_api_data!="":
         try:
-            ## figma_json = json.loads(figma_api_data)
-            # api_converted_data = get_analyzed_api_data(figma_api_data,image_url)
-            # with open("figma_api_data.txt", 'w') as file:
-            #     json.dump(api_converted_data, file)
-            
-            with open(dir_path+"/figma_api_data.json", 'w') as file:
-                json.dump(json.loads(figma_api_data), file)
-                print("API JSON data was successfully written to file")
-
-            upload_file_to_vector_store(dir_path+"/figma_api_data.json",vector_id)
+            figma_json = json.loads(figma_api_data)
+            with open("figma_api_data.json", 'w') as file:
+                json.dump(figma_json, file)
+            upload_file_to_vector_store("figma_api_data.json",vector_id)
             print("Figma API data file was successully uploaded")
             assistant = client.beta.assistants.update(
                 assistant_id=assistant_id,
@@ -1755,117 +1605,65 @@ async def multiple_files_flow(item: Item):
         except:
             print("Error while uploading figma_api_data file to assistant api")
     ###############################################################
-    image_id = ""
-    if image_url:        
-        #downloading the image
-        response = requests.get(image_url)
-        
-        if response.status_code == 200:
-            image = Image.open(BytesIO(response.content))
-            image.save(dir_path+"/output.png", format="PNG")
-            print("Image saved as output.png")
-        else:
-            print("Failed to retrieve the image")
+    if image_url:
+        # response = requests.get(image_url)
+        # if response.status_code == 200:
+        #     image = Image.open(BytesIO(response.content))
+        #     image.save("output.png", format="PNG")
+        #     print("Image saved as output.png")
+        # else:
+        #     print("Failed to retrieve the image")
 
-        image_id = upload_image_file_to_openai(dir_path+"/output.png")
-        print("Image successfully uploaded to OpenAI: ", image_id)
-        
+        # image_id = upload_image_file_to_openai("output.png")
+        # print("Image successfully uploaded to OpenAI: ", image_id)
+
+        ###############################################################
         if figma_api_data=="":
             print("Not using figma data")
-            payload_1 = [{"type": "text", "text": f"{prompt} \n Don't provide any unwanted explanation or commentary, give me only exact code with file and folder name."},{"type": "image_url","image_url": {"url": image_url}}]
+            payload_1 = [{"type": "text", "text": prompt},{"type": "image_url","image_url": {"url": image_url}}]
         else:
             print("Using figma data")
-            figma_info = "absoluteBoundingBox: Describes the absolute position and size of the element in the frame, here position is given in the form of x and y coordinates with respect to the screen, so place the components at proper positions"
-            if user_role == "Flutter Developer 2":
-                print("Flutter Developer mode output")
-                payload_1 = [{"type": "text", "text": f"{prompt}. Figma API data for the UI is uploaded in the figma_api_data.json file you can refer there to understand ui in more detail. \n Some information about figma data is: \n  Note: The colors in figma api data is in the form of RGBA fromat so make so add accurate colors in code \n{figma_info} \n The exisiting code follows MVC architecture and proper State Management so generate ouput according to it. Make separate files for reusable components, classes, and assets.Also maintain Colors and Strings as a reusable component. \n Don't provide any unwanted explanation or commentary, give me only exact code with file and folder name. Integrate the generated response with the existing uploaded code"}, {"type": "image_url","image_url": {"url": image_url}}]
-            else:
-                print("Normal output mode")
-                if status_project_code["status"] == "success":
-                    print("Using the styles data")
-                    styles_prompt = "User coding styles data is present in project_style_data.json, create response according to it."
-                    payload_1 = [
-                        {"type": "text", "text": f"{prompt} & integrate it with existing uploaded project code. The ouput should follow the archtitecture style and state management mentioned in the \"figma_api_data.json\" file. Figma API data for the UI is uploaded in the figma_api_data.json file you can refer there to understand UI in more detail. \n Some information about figma data is: \n Note: The colors in figma API data are in the form of RGBA format so add accurate colors in code \n{figma_info} \n {styles_prompt} \n Don't provide any unwanted explanation or commentary, give me only exact code with file and folder name. Integrate the generated response with the existing uploaded code"},
-                        {"type": "image_url", "image_url": {"url": image_url}}
-                    ]
-                else:     
-                    payload_1 = [{"type": "text", "text": f"{prompt}. Figma API data for the UI is uploaded in the figma_api_data.json file you can refer there to understand ui in more detail. \n Some information about figma data is: \n  Note: The colors in figma api data is in the form of RGBA fromat so make so add accurate colors in code \n{figma_info} \n Don't provide any unwanted explanation or commentary, give me only exact code with file and folder name. Integrate the generated response with the existing uploaded code"}, {"type": "image_url","image_url": {"url": image_url}}]
+            payload_1 = [{"type": "text", "text": f"{prompt}. Figma API data for the UI is uploaded in the figma_api_data.json file you can refer there to understand ui in more detail"}, {"type": "image_url","image_url": {"url": image_url}}]
         ###############################################################
         
         response_1 = get_response(thread_id, assistant_id, payload_1)
         print(response_1)
-        if response_1 == "Failed":
-            print("Here image uploading via url is failed, trying a backup route.")
-            if figma_api_data=="":
-                print("Not using figma data")
-                payload_1 = [{"type": "text", "text": f"{prompt} \n Don't provide any unwanted explanation or commentary, give me only exact code with file and folder name."},{"type": "image_file","image_file": {"file_id": image_id}}]
-            else:
-                print("Using figma data")
-                figma_info = "absoluteBoundingBox: Describes the absolute position and size of the element in the frame, here position is given in the form of x and y coordinates with respect to the screen, so place the components at proper positions"
-                payload_1 = [{"type": "text", "text": f"{prompt}. Figma API data for the UI is uploaded in the figma_api_data.json file you can refer there to understand ui in more detail. \n Some information about figma data is: \n  Note: The colors in figma api data is in the form of RGBA fromat so make so add accurate colors in code \n{figma_info} \n Don't provide any unwanted explanation or commentary, give me only exact code with file and folder name."}, {"type": "image_file","image_file": {"file_id": image_id}}]
-            
-            response_1 = get_response(thread_id, assistant_id, payload_1)
-            print(response_1)
-            
+                
         payload_2 = ""
         
         if additional_requirements =="":
-            payload_2 = [{"type": "text", "text": f"Generate logic code for every interactable element and modify the code. The output must be fully functional. Generate logic for the code by yourself don't expect from user. I had uploaded some common functionality steps in the Common_Functionality.json file you can refer from there to create functionality logic for component of UI. No need to add any additional functionality into the code, generate functionality for elements that are already present in the ui.\nAlso see the uploaded ui image and correct the position of any component which is wrong\n Don't provide any unwanted explanation, give me only exact code with comments. Ensure to follow file and folder name."},{"type": "image_url","image_url": {"url": image_url}}]
+            payload_2 = "Generate logic code for every interactable element and modify the code. The output must be fully functional. Generate logic for the code by yourself don't expect from user. I had uploaded some common functionality steps in the Common_Functionality.json file you can refer from there to create functionality logic for component of UI. No need to add any additional functionality into the code, generate functionality for elements that are already present in the ui."
         else:
-            payload_2 = [{"type": "text", "text": f"Generate logic code for every interactable element and modify the code. The output must be fully functional. Generate logic for the code by yourself don't expect from user. I had uploaded some common functionality steps in the Common_Functionality.json and also some specific requirements in More requirements.txt file you can refer from there to create functionality logic for component of UI. No need to add any additional functionality into the code, generate functionality for elements that are already present in the ui.\nAlso see the uploaded ui image and correct the position of any component which is wrong\n Don't provide any unwanted explanation, give me only exact code with comments. Ensure to follow file and folder name."},{"type": "image_url","image_url": {"url": image_url}}]
+            payload_2 = "Generate logic code for every interactable element and modify the code. The output must be fully functional. Generate logic for the code by yourself don't expect from user. I had uploaded some common functionality steps in the Common_Functionality.json and also some specific requirements in More requirements.txt file you can refer from there to create functionality logic for component of UI. No need to add any additional functionality into the code, generate functionality for elements that are already present in the ui."
 
-        
         response_2 = get_response(thread_id, assistant_id, payload_2)
         print(response_2)
-        if response_2 == "Failed":
-            print("Here image uploading via url is failed, trying a backup route.")
-            if additional_requirements =="":
-                payload_2 = [{"type": "text", "text": f"Generate logic code for every interactable element and modify the code. The output must be fully functional. Generate logic for the code by yourself don't expect from user. I had uploaded some common functionality steps in the Common_Functionality.json file you can refer from there to create functionality logic for component of UI. No need to add any additional functionality into the code, generate functionality for elements that are already present in the ui.\nAlso see the uploaded ui image and correct the position of any component which is wrong\n Don't provide any unwanted explanation, give me only exact code with comments. Ensure to follow file and folder name."},{"type": "image_file","image_file": {"file_id": image_id}}]
-            else:
-                payload_2 = [{"type": "text", "text": f"Generate logic code for every interactable element and modify the code. The output must be fully functional. Generate logic for the code by yourself don't expect from user. I had uploaded some common functionality steps in the Common_Functionality.json and also some specific requirements in More requirements.txt file you can refer from there to create functionality logic for component of UI. No need to add any additional functionality into the code, generate functionality for elements that are already present in the ui.\nAlso see the uploaded ui image and correct the position of any component which is wrong\n Don't provide any unwanted explanation, give me only exact code with comments. Ensure to follow file and folder name."},{"type": "image_file","image_file": {"file_id": image_id}}]            
-            
-            response_2 = get_response(thread_id, assistant_id, payload_2)
-            print(response_2)
-            
+        
         response = response_2
         
     else:
         if additional_requirements == "":
-            payload = f"{prompt} \n Don't provide any unwanted explanation or commentary, give me only exact code with file and folder name."
+            payload = prompt
         else:
-            payload = prompt + " .Refer to some requirements in uploaded More requirements.txt file \n Don't provide any unwanted explanation or commentary, give me only exact code with file and folder name."            
+            payload = prompt + " .Refer to some requirements in uploaded More requirements.txt file"            
         
         response = get_response(thread_id, assistant_id, payload)
         print(response)
 
-    def delete_local_file(file_path):
-        try:
-            if os.path.isfile(file_path):
-                os.remove(file_path)
-                print(f"Deleted file: {file_path}")
-            else:
-                print(f"File not found: {file_path}")
-        except Exception as e:
-            print(f"Error deleting file {file_path}: {e}")
-            
-    delete_local_file(dir_path+"/figma_api_data.json")
-    delete_local_file(dir_path+"/output.png")
-    
-    #deleting the image file
-    if image_id:
-        delete_image_file = client.files.delete(image_id)
-        print(delete_image_file)
-    else:
-        print("No need to delete the images")
-        
-    helping_data = {"figma_data":figma_api_data,"user_requirements_data":additional_requirements,"apps_data":extra_data,"project_code":json.dumps(api_data_json, indent=4, ensure_ascii=False)}
-    
-    delete_folder_recursive(dir_path)
+    file_path = os.path.join('./', "figma_api_data.json")
+    try:
+        if os.path.isfile(file_path):
+            os.remove(file_path)
+            print(f"Deleted file: {file_path}")
+        else:
+            print(f"File not found: {file_path}")
+    except Exception as e:
+        print(f"Error deleting file {file_path}: {e}")
     
     if response != "Failed":    
-        return {"status": "success", "assistant_id": assistant_id, "thread_id": thread_id, "response": response,"data":json.dumps(helping_data, indent=4, ensure_ascii=False)}
+        return {"status": "success", "assistant_id": assistant_id, "thread_id": thread_id, "response": response}
     else:
-        return {"status":"failed","data":json.dumps(helping_data, indent=4, ensure_ascii=False)}
+        return {"status":"failed"}
 
 @app.post("/analyze-files/")
 async def analyze_files(item: Item):
@@ -2112,302 +1910,6 @@ async def analyze_api_data(item: Item):
     print(response)
     
     return {"status":"success","response":response}
-
-@app.post("/compare-output-code/")
-async def compare_output_code(item: Item):
-    code = item.data
-    figma_data = item.prompt
-    
-    my_assistant = client.beta.assistants.create(
-        instructions="You are a comparision assistant whose task is to compare the data file with the output file and identify the hallucinated and missing elements, colors, font sizes, font styles, locations, positions, text and image placeholders that are present in the data file but not used in the code. Provide only these details without extra explanation, so the user can fix them manually.\nStart response by saying \"Missing Elements -\"",
-        name=f"Comparision assistant",
-        tools=[{"type": "file_search"}],
-        model="gpt-4o",
-    )
-    print(my_assistant)
-
-    assistant_id = my_assistant.id
-    print("assistant_id: ",assistant_id)
-
-    def write_code_to_file(filename: str, code: str) -> None:
-        try:
-            with open(filename, 'w') as file:
-                file.write(code)
-        except:
-            print("Error while writing code to file")
-
-    write_code_to_file("figma_data.txt",figma_data)
-    write_code_to_file("code.txt",code)
-
-    def upload_file_to_vector_store(file_name,vector_id):
-        file = client.files.create(
-            file=open(file_name, "rb"),
-            purpose="assistants"
-        )
-        file_id = file.id
-
-        vector_store_file = client.beta.vector_stores.files.create(
-            vector_store_id=vector_id,
-            file_id=file_id
-        )
-        print(file_name + " was successfully stored")
-        print(vector_store_file)
-        return file_id
-
-    store_name = "Uploaded files to Store"
-    vector_store = client.beta.vector_stores.create(
-        name=store_name
-    )
-
-    print(vector_store)
-    vector_id = vector_store.id
-
-    figma_id = upload_file_to_vector_store("figma_data.txt",vector_id)
-    code_id = upload_file_to_vector_store("code.txt",vector_id)
-    print(figma_id)
-    print(code_id)
-
-    assistant = client.beta.assistants.update(
-        assistant_id=assistant_id,
-        tool_resources={"file_search": {"vector_store_ids": [vector_id]}},
-    )
-    print("updated assistant: ",assistant)
-
-    def delete_files_by_name(directory, filenames):
-        for filename in filenames:
-            file_path = os.path.join(directory, filename)
-            try:
-                if os.path.isfile(file_path):
-                    os.remove(file_path)
-                    print(f"Deleted file: {file_path}")
-                else:
-                    print(f"File not found: {file_path}")
-            except Exception as e:
-                print(f"Error deleting file {file_path}: {e}")
-
-    delete_files_by_name('./',["figma_data.txt","code.txt"])
-
-    empty_thread = client.beta.threads.create()
-    print(empty_thread)
-    thread_id = empty_thread.id
-
-    payload = "Compare both the uploaded files and predict the missing elements"
-    final_response = get_response(thread_id,assistant_id,payload)
-    print(final_response)
-
-    def delete_vector_store_files(file_id):
-        deleted_vector_store_file = client.beta.vector_stores.files.delete(
-            vector_store_id=vector_id,
-            file_id=file_id
-        )
-        print(deleted_vector_store_file)
-
-    delete_vector_store_files(code_id)
-    delete_vector_store_files(figma_id)
-
-    deleted_vector_store = client.beta.vector_stores.delete(
-        vector_store_id=vector_id
-    )
-    print(deleted_vector_store)
-
-    dlt_thread = client.beta.threads.delete(thread_id)
-    print(dlt_thread)
-
-    dlt_assistant = client.beta.assistants.delete(assistant_id)
-    print(dlt_assistant)
-    
-    return {"status":"success","response":final_response}
-
-def store_user_styles(userID,projectName,overview,userNature):
-    url = 'http://35.85.112.192/api/store-project-data'   
-    # Define the headers
-    headers = {
-        'Accept': 'application/json',
-        'X-API-KEY': 'JGIp4AWFmI',
-        'Content-Type': 'application/json'
-    }
-
-    # Define the body
-    body = {
-        "user_id":userID,
-        "project_name":projectName,
-        "overview":overview,
-        "user_nature":userNature
-    }
-    # Make the POST request
-    response = requests.post(url, headers=headers, json=body)
-    return response
-    
-@app.post("/get-styles-data/")
-async def get_styles_data(item: Item):
-    user_id = item.id
-    api_data = json.loads(item.data)
-    
-    dir_path = create_user_directory(user_id)
-    print(dir_path)
-    
-    if api_data:
-        try:
-            with open(dir_path+"/api_data_file.json", 'w') as file:
-                json.dump(api_data, file)
-                print("API JSON data was successfully written to file")
-        except Exception as e:
-            print(f"Error occurred while uploading the data: {e}")
-
-    my_assistant = client.beta.assistants.create(
-        instructions='''
-        You are an expert software engineer and code reviewer. Your task is to analyze the following code to understand the user's unique coding style. Identify the user's coding conventions, commenting style, code structure, specific patterns, error handling, indentation style, use of libraries or frameworks, and fetch the project name if available. Provide a detailed analysis in JSON format.
-
-        Your analysis should cover the following aspects:
-        * Project Name:
-          Identify and describe the project name if available within the code or comments. If not available find out project name from the file path, anyways find out root directory name.
-          
-        * Architecture used:
-          Identify the architecture according to which the project are made(e.g, MVC or MVVM or any other)
-          
-        * State Management:
-          Identify which state management approach are used in the project(e.g, for flutter - Provider or Riverpod or Redux or any other)
-
-        * Naming Conventions:
-          Describe the naming conventions used for variables, functions, classes, etc.
-
-        * Commenting Style:
-          Describe how comments are used in the code (e.g., inline comments, block comments, docstrings).
-
-        * Code Structure:
-          Describe the overall structure of the code (e.g., use of classes, functions, modules).
-
-        * Specific Patterns:
-          Identify any recurring patterns or idioms unique to the user's coding style (e.g., frequent use of helper functions, specific ways of handling errors).
-           
-        * Error Handling:
-          Describe the approach to error handling in the code (e.g., use of try/except blocks, custom error messages).
-
-        * Indentation Style:
-          Describe the indentation style used in the code (e.g., spaces vs. tabs, number of spaces per indentation level).
-
-        * Use of Libraries/Frameworks:
-          Identify any libraries or frameworks used in the code and describe how they are utilized.
-
-        * Overall Coding Habits:
-          Provide any additional insights into the user's coding habits and style.
-
-        Provide the analysis in the following JSON format:
-        NOTE: do not include any text rather than JSON as this may break my code
-        ```json
-        [
-        {
-          "project_name": "name of the project",
-        },
-        {
-          "naming_conventions": "description of naming conventions",
-          "commenting_style": "description of commenting style",
-          "code_structure": "description of code structure",
-          "specific_patterns": "description of specific patterns",
-          "architecture_used":"description of architecture used"
-          "state_management":"description of state management used"
-          "error_handling": "description of error handling",
-          "indentation_style": "description of indentation style",
-          "libraries_frameworks": "description of libraries or frameworks used",
-          "overall_coding_habits": "additional insights into the user's coding habits and style"
-        }
-        ]
-        ```
-        ''',
-        name="User Code Analyzer",
-        tools=[{"type": "file_search"}],
-        model="gpt-4o",
-    )
-
-    assistant_id = my_assistant.id
-    print(f"Assistant ID: {assistant_id}")
-
-    store_name = "Uploaded files to Store"
-    vector_store = client.beta.vector_stores.create(name=store_name)
-    vector_id = vector_store.id
-    print(f"Vector ID: {vector_id}")
-
-    def upload_file_to_vector_store(file_name, vector_id):
-        try:
-            file = client.files.create(
-                file=open(file_name, "rb"),
-                purpose="assistants"
-            )
-            file_id = file.id
-
-            vector_store_file = client.beta.vector_stores.files.create(
-                vector_store_id=vector_id,
-                file_id=file_id
-            )
-            print(f"{file_name} was successfully stored")
-            print(f"Vector store file: {vector_store_file}")
-            return file_id
-        except Exception as e:
-            print(f"Error uploading file {file_name} to vector store: {e}")
-            return None
-
-    file_id = upload_file_to_vector_store(dir_path+"/api_data_file.json", vector_id)
-
-    assistant = client.beta.assistants.update(
-        assistant_id=assistant_id,
-        tool_resources={"file_search": {"vector_store_ids": [vector_id]}},
-    )
-    print(f"Updated assistant: {assistant}")
-
-    empty_thread = client.beta.threads.create()
-    thread_id = empty_thread.id
-    print(f"Thread ID: {thread_id}")
-
-    payload = [{"type": "text", "text": "Analyze the user codes and give proper analysis"}]
-    response_final = get_response(thread_id, assistant_id, payload)
-    print(f"Response: {response_final}")
-
-    print(f"File ID: {file_id}")
-
-    try:
-        deleted_vector_store_file = client.beta.vector_stores.files.delete(
-            vector_store_id=vector_id,
-            file_id=file_id
-        )
-        print(f"Deleted vector store file: {deleted_vector_store_file}")
-    except Exception as e:
-        print(f"Error while deleting the file: {e}")
-
-    try:
-        deleted_vector_store = client.beta.vector_stores.delete(
-            vector_store_id=vector_id
-        )
-        print(f"Deleted vector store: {deleted_vector_store}")
-    except Exception as e:
-        print(f"Error while deleting the store: {e}")
-
-    try:
-        response = client.beta.assistants.delete(assistant_id)
-        print(f"Deleted assistant: {response}")
-    except Exception as e:
-        print(f"Error while deleting the assistant: {e}")
-
-    if response_final == "Failed":
-        return {"status":"failed"}
-    else:
-        response_text = response_final
-        if response_text.startswith("```json"):
-            response_text = response_text[7:]
-        if response_text.endswith("```"):
-            response_text = response_text[:-3]  
-
-        delete_folder_recursive(dir_path)
-        
-        try:
-            json_obj = json.loads(response_text)
-            project_name = json_obj[0]["project_name"]
-            user_nature = json_obj[1]
-            stored_response = store_user_styles(user_id,project_name,"",user_nature)
-            print("stored_response: ",stored_response)
-            return {"status":"success","response":response_text}
-        except:
-            print("error while fetching the data")
-            return {"status":"failed"}
 
 async def stream_response():
     
