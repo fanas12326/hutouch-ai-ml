@@ -512,34 +512,9 @@ async def figma_custom_ui(item: Item):
     assets_used = data_json_obj["assets_used"]
     logging.info(f"image_url: {image_url}")
     logging.info(f"user_role: {user_role}")
-    logging.info(f"assets_used: {assets_used}")
-
-    #checking if the esential params is available
-
-    #if figma data is null
-    if api_data == "null" or api_data == "":
-        #if image url is also null
-        if image_url == "null" or image_url == "":
-            store_error(user_id,"/figma-custom-ui/","Unable to fetch Figma Data and UI image")
-            return {"status":"failed","response":"Alert: Unable to fetch Figma Data and UI image\n1. Kindly check if you had entered a valid figma url\n2. You have a stable internet connection\n3. You had entered a valid Screen name in prompt."}
-        #if image url is not null
-        else:
-            store_error(user_id,"/figma-custom-ui/","Unable to fetch Figma Data")
-            return {"status":"failed","response":"Alert: Unable to fetch Figma Data\n1. Kindly check if you had entered a valid figma url\n2. You have a stable internet connection\n3. You had entered a valid Screen name in prompt."}
-    # if figma data is not null
-    else:
-        #if image url is null
-        if image_url == "null" or image_url == "":
-            store_error(user_id,"/figma-custom-ui/","Unable to fetch UI image")
-            return {"status":"failed","response":"Alert: Unable to fetch UI image\n1. Kindly check if you had entered a valid figma url\n2. You have a stable internet connection\n3. You had entered a valid Screen name in prompt."}
-        #if image url is not null
-        else:
-            logging.info("Both image url and figma data is received")
-
-
     api_json_data = json.loads(api_data)
     logging.info(f"api_json_data: {api_json_data}")
-    
+    logging.info(f"assets_used: {assets_used}")
 
     dir_path = create_user_directory(user_id)
     logging.info(dir_path)
@@ -906,43 +881,6 @@ async def multiple_files_flow(item: Item):
     logging.info(f"additional_requirements: {additional_requirements}")
     logging.info(f"api_data: {api_data}")
     logging.info(f"figma_api_data: {figma_api_data}")
-
-    #checking if the esential params is available
-
-    if is_screen_used == "yes":
-        #if figma data is null
-        if figma_api_data == "null" or figma_api_data == "":
-            #if image url is also null
-            if image_url == "null" or image_url == "":
-                store_error(user_id,"/figma-custom-ui/","Unable to fetch Figma Data and UI image")
-                return {"status":"failed","response":"Alert: Unable to fetch Figma Data and UI image\n1. Kindly check if you had entered a valid figma url\n2. You have a stable internet connection\n3. You had entered a valid Screen name in prompt."}
-            #if image url is not null
-            else:
-                store_error(user_id,"/figma-custom-ui/","Unable to fetch Figma Data")
-                return {"status":"failed","response":"Alert: Unable to fetch Figma Data\n1. Kindly check if you had entered a valid figma url\n2. You have a stable internet connection\n3. You had entered a valid Screen name in prompt."}
-        # if figma data is not null
-        else:
-            #if image url is null
-            if image_url == "null" or image_url == "":
-                store_error(user_id,"/figma-custom-ui/","Unable to fetch UI image")
-                return {"status":"failed","response":"Alert: Unable to fetch UI image\n1. Kindly check if you had entered a valid figma url\n2. You have a stable internet connection\n3. You had entered a valid Screen name in prompt."}
-            #if image url is not null
-            else:
-                logging.info("Both image url and figma data is received")
-        
-        #if project code is present or not
-        if api_data == "null" or api_data == "":
-            store_error(user_id,"/figma-custom-ui/","Unable to fetch UI image")
-            return {"status":"failed","response":"Alert: Unable to fetch project code\n1. Kindly check if your VS code is opened\n2. Check if the HuTouch AI extension is installed on VS code\n3. There should not be more than one project opened in vs code at once\n4. Check if you have  a stable internet connection"}
-        else:
-            logging.info("Project code received")
-    else:
-        #if project code is present or not
-        if api_data == "null" or api_data == "":
-            store_error(user_id,"/figma-custom-ui/","Unable to fetch UI image")
-            return {"status":"failed","response":"Alert: Unable to fetch project code\n1. Kindly check if your VS code is opened\n2. Check if the HuTouch AI extension is installed on VS code\n3. There should not be more than one project opened in vs code at once\n4. Check if you have  a stable internet connection"}
-        else:
-            logging.info("Project code received")
 
     dir_path = create_user_directory(user_id)
     logging.info(dir_path)

@@ -1,0 +1,5 @@
+2024-09-13 00:52:35,546 - root - INFO - CPU Usage: 48.2%
+2024-09-13 00:52:35,586 - root - INFO - Memory Usage: 74.0% used, 2141032448 free
+2024-09-13 00:59:51,159 - root - INFO - Request: POST http://127.0.0.1:8000/create-a-assistant completed in 0.0320 seconds Status: 404 Result: success CPU Usage: 50.40% Memory Usage: 1.37 MB
+2024-09-13 01:02:36,612 - root - INFO - CPU Usage: 32.4%
+2024-09-13 01:02:36,613 - root - INFO - Memory Usage: 83.8% used, 1333202944 free

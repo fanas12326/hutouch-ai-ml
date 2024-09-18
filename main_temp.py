@@ -1067,14 +1067,13 @@ async def task_priority(item: Item):
     
 @app.post("/figma-custom-ui/")
 async def figma_custom_ui(item: Item):
-    print("Figma Custom UI - Started for user_id: ", item.id)
     user_id = item.id
-    print(f"user_id: {user_id}")
+    print("user_id: ",user_id)
     temp_api_data = json.loads(item.data)
 
     api_data = temp_api_data["figma_data"]
     added_requirements = temp_api_data["added_requirements"]
-    print(f"added_requirements: {added_requirements}")
+    print("added_requirements: ",added_requirements)
 
     temp_data = item.prompt
     data_json_obj = json.loads(temp_data)
@@ -1082,35 +1081,11 @@ async def figma_custom_ui(item: Item):
     image_url = data_json_obj["image_url"]
     user_role = data_json_obj["user_role"]
     assets_used = data_json_obj["assets_used"]
-    print(f"image_url: {image_url}")
-    print(f"user_role: {user_role}")
-    print(f"assets_used: {assets_used}")
-
-    #checking if the esential params is available
-
-    #if figma data is null
-    if api_data == "null" or api_data == "":
-        #if image url is also null
-        if image_url == "null" or image_url == "":
-            store_error(user_id,"/figma-custom-ui/","Unable to fetch Figma Data and UI image")
-            return {"status":"failed","response":"Alert: Unable to fetch Figma Data and UI image\n1. Kindly check if you had entered a valid figma url\n2. You have a stable internet connection\n3. You had entered a valid Screen name in prompt."}
-        #if image url is not null
-        else:
-            store_error(user_id,"/figma-custom-ui/","Unable to fetch Figma Data")
-            return {"status":"failed","response":"Alert: Unable to fetch Figma Data\n1. Kindly check if you had entered a valid figma url\n2. You have a stable internet connection\n3. You had entered a valid Screen name in prompt."}
-    # if figma data is not null
-    else:
-        #if image url is null
-        if image_url == "null" or image_url == "":
-            store_error(user_id,"/figma-custom-ui/","Unable to fetch UI image")
-            return {"status":"failed","response":"Alert: Unable to fetch UI image\n1. Kindly check if you had entered a valid figma url\n2. You have a stable internet connection\n3. You had entered a valid Screen name in prompt."}
-        #if image url is not null
-        else:
-            print("Both image url and figma data is received")
-
+    print("image_url: ",image_url)
+    print("user_role: ",user_role)
     api_json_data = json.loads(api_data)
-    print(f"api_json_data: {api_json_data}")
-
+    print("api_json_data: ",api_json_data)
+    print("assets_used: ",assets_used)
 
     dir_path = create_user_directory(user_id)
     print(dir_path)
@@ -1120,93 +1095,101 @@ async def figma_custom_ui(item: Item):
             try:
                 uploaded_file = client.files.create(file=file, purpose="assistants")
                 file_id = uploaded_file.id
-                vector_store_file = client.beta.vector_stores.files.create(
-                    vector_store_id=vector_id, file_id=file_id
-                )
-                print(f"{file_name} was successfully stored")
+                # uploaded_file_ids.append(file_id)
+                vector_store_file = client.beta.vector_stores.files.create(vector_store_id=vector_id, file_id=file_id)
+                print(file_name + " was successfully stored")
                 print(vector_store_file)
             except:
-                print(f"Not able to store file {file_name}")
-
+                print("Not able to store file ",file_name)
+    
     def write_code_to_file(filename: str, code: str) -> None:
-        with open(filename, "w", encoding="utf-8") as file:
+        with open(filename, 'w', encoding='utf-8') as file:
             file.write(code)
-
+    
     # Prompt 1
     response = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": "Examine the uploaded UI image and perform the following tasks:\n\nIdentify Components: List each visible component (e.g., buttons, text fields, icons, overall background colour/gradient, background color for card/elements, etc ) along with its position on the screen using relative positioning.\n\nDescribe Functionality: Explain the visiblity of each component(eg. product card with curved border and 3d image overlaying card ), purpose and function of each component (e.g. what happens when the user interacts with it).\n\nDetect Repeatation: Identify components that are repeated or have same functions.\n\nImportant Notes:\n\nCover All Elements: Include every visible component in the UI; do not omit any item, no matter how small like shadows & gradients also.\nDetail Repetative Elements: Highlight repeated structures clearly.\nEnsure that every component is accounted for with precise descriptions.\nDo not provide extra explanation or summary.",
-                    },
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": image_url,
-                        },
-                    },
-                ],
-            }
-        ],
+    model="gpt-4o",
+    messages=[
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Examine the uploaded UI image and perform the following tasks:\n\nIdentify Components: List each visible component (e.g., buttons, text fields, icons, background colour/gradient) along with its exact position on the screen using relative positioning.\n\nDescribe Functionality: Explain the purpose and function of each component (e.g., what happens when the user interacts with it).\n\nDetect Repeatation: Identify components that are repeated or have same functions.\n\nImportant Notes:\n\nCover All Elements: Include every visible component in the UI; do not omit any item, no matter how small.\nDetail Repetative Elements: Highlight repeated structures clearly.\nEnsure that every component is accounted for with precise descriptions.\nDo not provide extra explanation or summary."},
+                {
+                "type": "image_url",
+                "image_url": {
+                    "url": image_url,
+                },
+                },
+            ],
+        }
+    ],
+    # max_tokens=1000,
     )
 
     response_1 = response.choices[0].message.content
-    print("response for prompt1: \n")
     print(response_1)
 
-    # Prompt 2
+    #Prompt2
     my_assistant = client.beta.assistants.create(
-        instructions="You are an expert coder. \n  ##REMEMBER: \n      1. For the next 9-10 prompts, treat all interactions as part of a single task related to creating UI or coding from scratch. Do not lose context; keep track of all inputs and responses to ensure continuity in the design and coding process.\n        2. Build the UI or code sequentially based on user instructions. If a new prompt introduces changes or additions, integrate them without losing the overall structure and consistency of the previous work.\n        3. When generating UI, ensure that the design matches the description provided by the user up to 90%, with all specified components present. If the description evolves, adjust the code accordingly without losing context.\n",
-        name="Figma Assistant",
-        tools=[{"type": "file_search"}],
+        instructions="You are an Code assistant. \n        1. For the next 9-10 prompts, treat all interactions as part of a single task related to creating UI or coding from scratch. Do not lose context; keep track of all inputs and responses to ensure continuity in the design and coding process.\n        2. Build the UI or code sequentially based on user instructions. If a new prompt introduces changes or additions, integrate them without losing the overall structure and consistency of the previous work.\n        3. When generating UI, ensure that the design matches the description provided by the user up to 90%, with all specified components present. If the description evolves, adjust the code accordingly without losing context.\n",
+        name="Good Assistant",
+        tools=[{"type":
+        "file_search"}],
         model="gpt-4o",
     )
     print(my_assistant)
 
     def upload_document_file_to_openai(filepath):
         uploaded_file = client.files.create(
-            file=open(filepath, "rb"), purpose="assistants"
+            file=open(filepath, "rb"),
+            purpose="assistants"
         )
         return uploaded_file.id
-
+    
     def write_code_to_file(filename: str, code: str) -> None:
-        with open(filename, "w", encoding="utf-8") as file:
-            file.write(code)
-
+            with open(filename, 'w', encoding='utf-8') as file:
+                file.write(code)
+    
+    api_converted_data = ""
+    
     if api_data != "":
-        api_converted_data = get_analyzed_api_data(api_data, image_url, dir_path)
-        filename = dir_path + "/figma_data_file.txt"
-        write_code_to_file(filename, api_converted_data)
 
-    # Creating the vector store
-    vector_store = client.beta.vector_stores.create(name="Uploaded Document files")
+        # api_converted_data = "Based on the Figma API response data and the provided UI image, here is an organized breakdown of the components shown in the UI screen:\n\n---\n\n### A. Header Section\n\n1. **Top Navigation Bar:**\n   - **Positioning and Sizing:** \n     - Position: `x: -676, y: -2272`\n     - Size: `width: 375, height: 54`\n   - **Shapes:** Rectangle\n   - **Fill Color:** Solid, rgba(1, 1, 1, 1)\n   - **Effects (Shadows):** \n     - Type: Drop Shadow\n     - Color: rgba(60, 60, 67, 0.29)\n     - Offset: `x: 0, y: 0.33`\n   - **Constraints:** Vertical: SCALE, Horizontal: SCALE\n\n2. **Instagram Logo (Center):**\n   - **Positioning and Sizing:**\n     - Position: `x: -326, y: -2466.33`\n     - Size: `width: 88, height: 24`\n   - **Shapes:** Combination of paths and vectors (Boolean operations)\n   - **Fill Color:** Various gradients and solid fills for different parts\n\n3. **Messenger Icon (Top Right):**\n   - **Positioning and Sizing:**\n     - Position: `x: -626, y: -2486`\n     - Size: `width: 24, height: 24`\n   - **Shapes:** Vector\n   - **Fill Color:** Solid, rgba(23, 122, 240, 1)\n   - **Constraints:** Vertical: SCALE, Horizontal: SCALE\n\n4. **Add Post Icon (Top Left):**\n   - **Positioning and Sizing:**\n     - Position: `x: -576, y: -2486`\n     - Size: `width: 24, height: 24`\n   - **Shapes:** Vector\n   - **Fill Color:** Solid, rgba(0, 0, 0, 1)\n   - **Constraints:** Vertical: SCALE, Horizontal: SCALE\n\n---\n\n### B. Story Section\n\n1. **Story Thumbnails:**\n   - **Positioning and Sizing:** Varies for each thumbnail (e.g., the first thumb is at `x: -676, y: -2244`, size: `width: 76, height: 76`)\n   - **Shapes:** Oval (Vector)\n   - **Fill Type:** Image\n   - **Stroke:** Color rgba(0, 0, 0, 0.1), Width: 0.5\n   - **Constraints:** Vertical: SCALE, Horizontal: SCALE\n\n2. **Story Thumbnails (More Icon):**\n   - **Shapes:** Boolean operation of several small circles\n   - **Fill Color:** Solid, rgba(216, 216, 216, 1)\n   - **Constraints:** Vertical: SCALE, Horizontal: SCALE\n\n---\n\n### C. Main Feed Section\n\n1. **Post Image:**\n   - **Positioning and Sizing:**\n     - Position: `x: -676, y: -2216`\n     - Size: `width: 375, height: 375`\n   - **Shapes:** Rectangle\n   - **Fill Type:** Image\n\n2. **Post Header:**\n   - **Positioning and Sizing:**\n     - Position: `x: -676, y: -2272`\n     - Size: `width: 375, height: 54`\n   - **Background Color:** Solid, rgba(1, 1, 1, 1)\n   - **Shadows:** \n     - Color: rgba(60, 60, 67, 0.3)\n     - Offset: `x: 0, y: 0.33`\n\n3. **User Profile Picture (Top Left of Post Header):**\n   - **Positioning and Sizing:**\n     - Positioned within the header at: `x: -666, y: -2261`\n     - Size: `width: 32, height: 32`\n   - **Shapes:** Oval (Vector)\n   - **Fill Type:** Image\n   - **Stroke:** Color rgba(0, 0, 0, 0.1), Width: 0.5\n\n4. **Username and Location:**\n   - **Positioning and Sizing:**\n     - Positioned within the header with username at `x: -624, y: -2242`\n     - Location below username\n   - **Text Details:**\n     - Font Size: Username (17), Location (14)\n     - Font Weight: Normal/Bold for username\n     - Font Family: San Francisco\n     - Text Color for Username: rgba(38, 38, 38, 1)\n     - Text Color for Location: rgba(38, 38, 38, 1)\n\n5. **More Icon (Top Right of Post Header):**\n   - **Positioning and Sizing:**\n     - Positioned within the header at: `x: -330, y: -2246.5`\n     - Size: `width: 14, height: 3`\n   - **Shapes:** Boolean operation\n   - **Fill Color:** Solid, rgba(216, 216, 216, 1)\n\n---\n\n### D. Interaction Buttons (Under Post Image)\n\n1. **Like Button:**\n   - **Positioning and Sizing:** Left-most icon (e.g., at `x: -626, y: -1829`)\n   - **Shapes:** Vector\n   - **Fill Color:** Solid, rgba(38, 38, 38, 1)\n   - **Constraints:** Vertical: SCALE, Horizontal: SCALE\n\n2. **Comment Button:**\n   - **Positioning and Sizing:** Next to Like button (e.g., at `x: -601, y: -1829`)\n   - **Shapes:** Vector\n   - **Fill Color:** Solid, rgba(38, 38, 38, 1)\n   - **Constraints:** Vertical: SCALE, Horizontal: SCALE\n\n3. **Share Button:**\n   - **Positioning and Sizing:** Positioned to the right of the Comment button\n   - **Shapes:** Vector\n   - **Fill Color:** Solid, rgba(38, 38, 38, 1)\n   - **Constraints:** Vertical: SCALE, Horizontal: SCALE\n\n4. **Save Button:**\n   - **Positioning and Sizing:** Positioned to the right-most of the interaction buttons\n   - **Shapes:** Vector\n   - **Fill Color:** Solid, rgba(38, 38, 38, 1)\n   - **Constraints:** Vertical: SCALE, Horizontal: SCALE\n\n---\n\n### E. Post Description and Comments\n\n1. **Text Elements (like description, comments):**\n   - **Positioning and Sizing:** Below the interaction buttons section\n   - **Font Details:** \n     - Font Size: Varies (e.g., 14 for comment text)\n     - Font Weight: Normal\n     - Font Family: San Francisco\n     - Text Color: rgba(38, 38, 38, 1)\n   - **Constraints:** Vertical: TOP, Horizontal: LEFT\n\n---\n\nThis comprehensive breakdown ensures coverage of all visible components in the provided UI image, based on the Figma API response data. The data provided includes details on positioning, sizing, colors, shapes, and other relevant properties."
+
+        api_converted_data = get_analyzed_api_data(api_data,image_url,dir_path)
+        # Specify the filename
+        filename = dir_path + '/figma_data_file.txt'
+
+        write_code_to_file(filename,api_converted_data)
+
+    
+    #creating the vector store
+    vector_store = client.beta.vector_stores.create(
+    name="Uploaded Document files"
+    )
     print(vector_store)
     vector_id = vector_store.id
-    print(f"vector_id: {vector_id}")
+    print("vector_id: ",vector_id)
 
-    # Uploading the figma data assistant
-    upload_file_to_vector_store(dir_path + "/figma_data_file.txt", vector_id)
+    #uploading the figma data assistant
+    upload_file_to_vector_store(dir_path+"/figma_data_file.txt",vector_id)
 
     assistant_id = my_assistant.id
-    print(f"assistant_id: {assistant_id}")
-    print(f"vector_id: {vector_id}")
+    # print("file_id: ",file_id)
+    print("assistant_id: ",assistant_id)
+    print("vector_id: ",vector_id)
 
     if assets_used != "null" and assets_used != "":
         try:
-            write_code_to_file(dir_path + "/assets_file.txt", assets_used)
-            assets_file_id = upload_document_file_to_openai(
-                dir_path + "/assets_file.txt"
-            )
+            write_code_to_file(dir_path+"/assets_file.txt",assets_used)
+            assets_file_id = upload_document_file_to_openai(dir_path+"/assets_file.txt")
             vector_store_file = client.beta.vector_stores.files.create(
-                vector_store_id=vector_id, file_id=assets_file_id
+            vector_store_id=vector_id,
+            file_id=assets_file_id
             )
             print(vector_store_file)
         except:
-            print("Some error occurred while using the file")
+            print("Some error occured while using the file")
             assets_used = ""
 
     thread = client.beta.threads.create()
@@ -1222,79 +1205,58 @@ async def figma_custom_ui(item: Item):
 
     updated_assistant = update_assistant(vector_id)
     print(updated_assistant)
-    
-# -----------Generating First level of code----------------
-    figma_info = "absoluteBoundingBox: Describes the absolute position and size of the element in the frame, here position is given in the form of x and y coordinates with respect to the screen, so place the components at proper positions, for size, use the approximate sie in percentage according to screen size"
-    assets_info = 'The assets which can be used while generating the code is mentioned in uploaded file "assets info.txt" use whichever assets used as image or icon required to generate the code.'
 
+    figma_info = "absoluteBoundingBox: Describes the absolute position and size of the element in the frame, here position is given in the form  of x and y coordinated with respect to the screen, so place the components at proper positions"
+    assets_info = "The assets which can be used while generating the code is mentioned in uploaded file \"assets info.txt\" use whichever assets used as image or icon required to generate the code."
     if user_role == "Flutter Developer 2":
         print("In flutter dev prompt mode")
         payload = [
             {
                 "type": "text",
-                "text": f'Generate a {user_role} code with MVC architecture and proper State Management for the figma UI based on UI image, figma styling data(note: figma data is uploaded in figma_data_file.json file) and  Description of the UI: " {response_1} ".\nMake separate files for reusable components, classes, and assets. Also maintain Colors and Strings as a reusable component. \n Some information about figma data is: \n  Note: The colors in figma API data is in the form of RGBA format so add accurate colors in code \n{figma_info} \n Ensure the code includes: 1. Proper error handling for each code file and method. 2. Proper commenting so that every non-coder can also understand the code. 3. Provide only the exact code with file and folder names. No need to generate code for Status bar showing battery, time, etc.',
+                "text": f"Generate a {user_role} code with MVC architecture and proper State Management for the figma UI based on UI image, figma styling data(note: figma data is uploaded in figma_data_file.json file) and  Description of the UI: \" {response_1} \".\nMake separate files for reusable components, classes, and assets. Also maintain Colors and Strings as a reusable component. \n Some information about figma data is: \n  Note: The colors in figma API data is in the form of RGBA format so add accurate colors in code \n{figma_info} \n Ensure the code includes: 1. Proper error handling for each code file and method. 2. Proper commenting so that every non-coder can also understand the code. 3. Provide only the exact code with file and folder names. No need to generate code for Status bar showing battery, time, etc."
             },
-            {"type": "image_url", "image_url": {"url": image_url}},
+            {
+                "type": "image_url",
+                "image_url": {"url": image_url}
+            }
         ]
     elif user_role == "Web Developer (HTML & CSS & JavaScript only)":
         payload = [
             {
                 "type": "text",
-                "text": f"Generate a code for given Web UI based on uploaded UI image, description of the UI and figma styling data (note: figma data is uploaded in figma_data_file.json file). Description of the UI: {response_1}. \nThe logic should be self-contained, ensuring that the code is fully functional without requiring additional user input. Refer to the common functionality steps provided in the file to create logic for each component. Avoid adding new functionalities; focus on creating exact same elements present in the UI.\n\nPlease ensure the code includes:\n\nProper error handling for each function to manage exceptions gracefully.\nDetailed comments in both the HTML and JavaScript files.\nAccurate file and folder names for the HTML, CSS, and JavaScript files involved, reflecting the exact structure needed.\nProvide the updated project structure.",
+                "text": f"Generate a code for given Web UI based on uploaded UI image, description of the UI and figma styling data (note: figma data is uploaded in figma_data_file.json file). Description of the UI: {response_1}. \nThe logic should be self-contained, ensuring that the code is fully functional without requiring additional user input. Refer to the common functionality steps provided in the file to create logic for each component. Avoid adding new functionalities; focus on creating exact same elements present in the UI.\n\nPlease ensure the code includes:\n\nProper error handling for each function to manage exceptions gracefully.\nDetailed comments in both the HTML and JavaScript files.\nAccurate file and folder names for the HTML, CSS, and JavaScript files involved, reflecting the exact structure needed.\nProvide the updated project structure."
             },
-            {"type": "image_url", "image_url": {"url": image_url}},
+            {
+                "type": "image_url",
+                "image_url": {"url": image_url}
+            }
         ]
     else:
         print("Generating Prompt 2")
 
         if assets_used != "null" and assets_used != "":
             print("Using assets to generate code")
-            payload = [
-                {
-                    "type": "text",
-                    "text": f'First breakdown step by step how you would implement this and then Generate a {user_role} code for the figma UI based on UI image, figma styling data(note: figma data is uploaded in figma_data_file.txt file) and  Description of the UI: " {response_1} ".\n Some information about figma data is: \n  Note: The colors in figma api data is in the form of RGBA format so make so add accurate colors in code \n{figma_info} \n No need to generate code for Status bar showing battery, time, etc.\nMake components reusable instead of hardcoding repetitive components to avoid duplicate code. \n{assets_info}\nGenerated code must contain some explanatory comments.\nThe generated output must not contain any unwanted explanation or discussion of the output.\n Also Make sure the generated code doesnot include deprecated snippets or imports also the generated code is without any error.',
-                },
-                {"type": "image_url", "image_url": {"url": image_url}},
-            ]
+            payload = [{"type": "text", "text": f"Generate a {user_role} code for the figma UI based on UI image, figma styling data(note: figma data is uploaded in figma_data_file.txt file) and  Description of the UI: \" {response_1} \".\n Some information about figma data is: \n  Note: The colors in figma api data is in the form of RGBA fromat so make so add accurate colors in code \n{figma_info} \n No need to generate code for Status bar showing battery, time, etc.\nMake components reusable instead of hardcoding repetative components to avoid duplicate code. {assets_info}\nGenerated code must contain some explanatory comments.\nThe generated output must not contain any unwanted commentary or explanation of the output"},{"type": "image_url","image_url": {"url": image_url}}]
         else:
             print("Not using assets")
-            payload = [
-                {
-                    "type": "text",
-                    "text": f'First breakdown step by step how you would implement this and then Generate a {user_role} code for the figma UI based on UI image, figma styling data(note: figma data is uploaded in figma_data_file.txt file) and  Description of the UI: " {response_1} ".\n Some information about figma data is: \n  Note: The colors in figma api data is in the form of RGBA format so make so add accurate colors in code \n{figma_info} \n No need to generate code for Status bar showing battery, time, etc.\nMake components reusable instead of hardcoding repetitive components to avoid duplicate code.\nGenerated code must contain some explanatory comments.\nThe generated output must not contain any unwanted explanation of the output.\n Also Make sure the generated code doesnot include deprecated snippets or imports also the generated code is without any error.',
-                },
-                {"type": "image_url", "image_url": {"url": image_url}},
-            ]
+            payload = [{"type": "text", "text": f"Generate a {user_role} code for the figma UI based on UI image, figma styling data(note: figma data is uploaded in figma_data_file.txt file) and  Description of the UI: \" {response_1} \".\n Some information about figma data is: \n  Note: The colors in figma api data is in the form of RGBA fromat so make so add accurate colors in code \n{figma_info} \n No need to generate code for Status bar showing battery, time, etc.\nMake components reusable instead of hardcoding repetative components to avoid duplicate code\nGenerated code must contain some explanatory comments.\nThe generated output must not contain any unwanted commentary or explanation of the output"},{"type": "image_url","image_url": {"url": image_url}}]
 
-    response_2 = get_response(thread_id, assistant_id, payload)
-    print("response for prompt2: \n")
+    response_2 = get_response(thread_id,assistant_id,payload)
     print(response_2)
-    
-# -----------ENDED Generating First level of code----------------
-    
-    
-    
-# ----------HARDCODED ADAPTIBILITY ----------------
-    # payload = [
-    #     {
-    #         "type": "text",
-    #         "text": f"The generated code might not contain proper screen adaptability. The code must be such that it should adapt seamlessly to different screen sizes and orientations. The component should resize text, images, and interactive elements appropriately based on the screen size. Refer uploaded ui image to study ui. Generate entire code with comments and without any explanation",
-    #     },
-    #     {"type": "image_url", "image_url": {"url": image_url}},
-    # ]
-    # response_interim = get_response(thread_id, assistant_id, payload)
-    # print(response_interim)
-# ----------ENDING HARDCODED ADAPTIBILITY ----------------
 
-
+    payload = [{"type": "text", "text": f"The generated code doesn't contain proper screen adaptability. The code must be such that it should adapt seamlessly to different screen sizes and orientations. The component should resize text, images, and interactive elements appropriately based on the screen size. Refer uploaded ui image to study ui. Generate entire code without any commentory and explanation"},{"type": "image_url","image_url": {"url": image_url}}]
+    response_interim = get_response(thread_id,assistant_id,payload)
+    print(response_interim)
+            
     # #deleting the uploaded image file
     def delete_openai_files(file_id):
         deleted_file = client.files.delete(file_id)
         return deleted_file
 
-    def remove_file_from_vector_store(fileID, vectorID):
+    def remove_file_from_vector_store(fileID,vectorID):
         deleted_vector_store_file = client.beta.vector_stores.files.delete(
-            vector_store_id=vectorID, file_id=fileID
+            vector_store_id=vectorID,
+            file_id=fileID
         )
         print(deleted_vector_store_file)
 
@@ -1306,101 +1268,83 @@ async def figma_custom_ui(item: Item):
             print(vector_store_files)
             file_obj = vector_store_files.data
             for files in file_obj:
-                remove_file_from_vector_store(files.id, vector_id)
+                remove_file_from_vector_store(files.id,vector_id)
         except:
-            print("Some error occurred while deleting the files")
+            print("Some error ocurred while deleting the files")
 
     retrieve_current_files_and_remove(vector_id)
 
     print("Correcting the code according to the ui image")
-    payload = [
-        {
-            "type": "text",
-            "text": f"The generated UI is not accurate and is not matching with the UI image can you please enhance the code such that it would be exactly matching to the ui. See whichever elements is missing or not properly adjusted in the code or the spacing between the ui components is improper or the position of the element is improper and modify the code accordingly, do not loose original comments & properties of code like adaptiblity and other. Make sure to give complete code without extra explaination about generated code.",
-        },
-        {"type": "image_url", "image_url": {"url": image_url}},
-    ]
+    payload = [{"type": "text", "text": f"The generated UI is not proper and is not matching with the UI image can you please fix the code such that it would be exactly according to the ui. See whichever elements is missing in the code or the spacing between the ui components is improper or the position of the element is improper and modify the code accordingly"},{"type": "image_url","image_url": {"url": image_url}}]
 
-    response_3 = get_response(thread_id, assistant_id, payload)
+    response_3 = get_response(thread_id,assistant_id,payload)
     print(response_3)
-# -----------ENDED Correcting code a/c ui image----------------
 
-# -----------adding coding styles to the code----------------
-
-    status_project_code = store_project_data_locally(user_id, dir_path)
-
-    if status_project_code["status"] == "success":
-        data_content = status_project_code["data"]
-        payload = f"Restructure the generated code with the exact architecture, state management, code structure, adaptive and responsive design, app constants, and error handling as specified in the coding styles below. Ensure that the code is separated into the appropriate folders and files, with clear folder and file names & path displayed. Maintain all existing UI components and functionalities while applying the specified styles. Thoroughly verify that no part of the original code, especially UI elements, interactions, or functionality, is lost during the restructuring process. Use detailed checks to ensure all elements are correctly styled and integrated as per the guidelines.\n\nIf any ambiguity arises in implementing styles without affecting the code's functionality, maintain the original code logic, and add comments highlighting potential adjustments needed to fully align with the coding standards.\n\nCoding Styles are as follows:\n{data_content}\n"
-
-        print(payload)
-
-    if status_project_code["status"] == "success":
-        print("Using the styles data")
-        data_content = status_project_code["data"]
-        payload = f"Restructure the generated code with the exact architecture, state management, code structure, adaptive and responsive design, app constants, and error handling as specified in the coding styles below. Ensure that the code is separated into the appropriate folders and files, with clear folder and file names & path displayed. Maintain all existing UI components and functionalities while applying the specified styles. Thoroughly verify that no part of the original code, especially UI elements, interactions, or functionality, is lost during the restructuring process. Use detailed checks to ensure all elements are correctly styled and integrated as per the guidelines.\n\nIf any ambiguity arises in implementing styles without affecting the code's functionality, maintain the original code logic, and add comments highlighting potential adjustments needed to fully align with the coding standards.\n\nCoding Styles are as follows:\n{data_content}\n"
-
-        print(payload)
-        response_4 = get_response(thread_id, assistant_id, payload)
-        response_final = response_4
-        print("generated response_4")
-        print(response_final)
-    
-# -----------ENDING adding coding styles to the code----------------
-
-
-# -----------adding functionalities to the code----------------
     if added_requirements != "":
-        write_code_to_file(dir_path + "/More requirements.txt", added_requirements)
+        write_code_to_file(dir_path+"/More requirements.txt",added_requirements)
         print("More requirements was successfully made")
-        upload_file_to_vector_store(dir_path + "/More requirements.txt", vector_id)
+        upload_file_to_vector_store(dir_path+"/More requirements.txt",vector_id)
     else:
-        print("Additional requirements don't exist")
+        print("Additional requirements doesn't exist")
 
     file_id = upload_document_file_to_openai("Common_Functionality.json")
     print(file_id)
 
     vector_store_file = client.beta.vector_stores.files.create(
-        vector_store_id=vector_id, file_id=file_id
+        vector_store_id=vector_id,
+        file_id=file_id
     )
     print(vector_store_file)
 
+    # prompt 3
+
     print(thread_id)
 
-    if added_requirements == "":
-        payload = 'The current generated code needs functionalities added to it. Refer to "Common_Functionality.json" for available functionality descriptions. This file contains common functionalities with the following details:\n- *Functionality Name*: The name of the functionality.\n- *Description*: Steps to implement the functionality.\n- *Type*: Specifies the type of UI element the functionality is linked to.\n\n### Instructions:\n1. *Strictly Maintain the Existing UI Structure*: Do not modify, alter, or disturb the existing UI elements, layout, or structure in any way. Only focus on adding the required functionalities.\n   \n2. *Match Functionalities to Existing UI Elements*: Implement only those functionalities that directly correspond to UI elements already present in the code. Avoid creating new UI elements (e.g., text boxes, buttons) that are not already in the design, even if the functionality suggests it.\n\n3. *Avoid Unnecessary Additions*: If a functionality in "Common_Functionality.json" does not naturally fit the existing UI elements, do not implement it. For instance, if the code has a "Sign up with Email" button but no email text box, do not add the text box. Only apply functionalities that match the current UI elements without altering or adding new UI components.\n\n4. *Do Not Assume Functionalities*: Only implement functionalities that are clearly defined and directly applicable to existing elements. Do not assume or create new features that are not explicitly needed by the UI.\n\n5. *Seamless Integration*: Ensure that added functionalities integrate smoothly with the existing code without breaking or changing the design or structure of the UI.\n\n6. *No Extra Commentary or Unnecessary Code Changes*: Focus solely on implementing the relevant functionalities. Avoid adding any explanations or changes that are not directly related to the functional aspects.\n\n### Output Expectations:\n- *Functionality Alignment*: Ensure all functionalities align with the UI elements present in the code and do not introduce new elements.\n- *Maintain UI Integrity*: The structure and design of the existing UI code must remain completely unchanged.\n- *Precision and Relevance*: Only add what is necessary and relevant. Do not add functionalities that require UI modifications unless those elements already exist in the current code.'
+    if added_requirements=="":
+        payload = "The current generated code needs functionalities added to it. Refer to \"Common_Functionality.json\" for available functionality descriptions. This file contains common functionalities with the following details:\n- *Functionality Name*: The name of the functionality.\n- *Description*: Steps to implement the functionality.\n- *Type*: Specifies the type of UI element the functionality is linked to.\n\n### Instructions:\n1. *Strictly Maintain the Existing UI Structure*: Do not modify, alter, or disturb the existing UI elements, layout, or structure in any way. Only focus on adding the required functionalities.\n   \n2. *Match Functionalities to Existing UI Elements*: Implement only those functionalities that directly correspond to UI elements already present in the code. Avoid creating new UI elements (e.g., text boxes, buttons) that are not already in the design, even if the functionality suggests it.\n\n3. *Avoid Unnecessary Additions*: If a functionality in \"Common_Functionality.json\" does not naturally fit the existing UI elements, do not implement it. For instance, if the code has a \"Sign up with Email\" button but no email text box, do not add the text box. Only apply functionalities that match the current UI elements without altering or adding new UI components.\n\n4. *Do Not Assume Functionalities*: Only implement functionalities that are clearly defined and directly applicable to existing elements. Do not assume or create new features that are not explicitly needed by the UI.\n\n5. *Seamless Integration*: Ensure that added functionalities integrate smoothly with the existing code without breaking or changing the design or structure of the UI.\n\n6. *No Extra Commentary or Unnecessary Code Changes*: Focus solely on implementing the relevant functionalities. Avoid adding any explanations or changes that are not directly related to the functional aspects.\n\n### Output Expectations:\n- *Functionality Alignment*: Ensure all functionalities align with the UI elements present in the code and do not introduce new elements.\n- *Maintain UI Integrity*: The structure and design of the existing UI code must remain completely unchanged.\n- *Precision and Relevance*: Only add what is necessary and relevant. Do not add functionalities that require UI modifications unless those elements already exist in the current code."    
         print("Generating prompt 3 normally")
     else:
-        payload = 'The current generated code needs functionalities added to it. Refer to "More requirements.txt" for available functionality descriptions. This file contains functionalities description, analyze it and strictly add every mentioned functionality from the file.\n\n### Instructions:\n1. *Strictly Maintain the Existing UI Structure*: Do not modify, alter, or disturb the existing UI elements, layout, or structure in any way. Only focus on adding the mentioned functionalities.\n\n2. *Do Not Assume Functionalities*: Only implement functionalities that are clearly defined and directly applicable to existing elements. Do not assume or create new features that are not explicitly needed by the UI.\n\n3. *Seamless Integration*: Ensure that added functionalities integrate smoothly with the existing code without breaking or changing the design or structure of the UI.\n\n4. *No Extra Commentary or Unnecessary Code Changes*: Focus solely on implementing the relevant functionalities. Avoid adding any explanations or changes that are not directly related to the functional aspects.\n\n### Output Expectations:\n- *Functionality Alignment*: Ensure all functionalities align with the UI elements present in the code and do not introduce new elements.\n- *Maintain UI Integrity*: Each functionality should be added and the structure and design of the existing UI code must remain completely unchanged.'
-        print("Generating prompt 3 with More requirements")
+        payload = "The current generated code needs functionalities added to it. Refer to \"More requirements.txt\" for available functionality descriptions. This file contains functionalities description, analyze it and strictly add every mentioned functionality from the file.\n\n### Instructions:\n1. *Strictly Maintain the Existing UI Structure*: Do not modify, alter, or disturb the existing UI elements, layout, or structure in any way. Only focus on adding the mentioned functionalities.\n\n2. *Do Not Assume Functionalities*: Only implement functionalities that are clearly defined and directly applicable to existing elements. Do not assume or create new features that are not explicitly needed by the UI.\n\n3. *Seamless Integration*: Ensure that added functionalities integrate smoothly with the existing code without breaking or changing the design or structure of the UI.\n\n4. *No Extra Commentary or Unnecessary Code Changes*: Focus solely on implementing the relevant functionalities. Avoid adding any explanations or changes that are not directly related to the functional aspects.\n\n### Output Expectations:\n- *Functionality Alignment*: Ensure all functionalities align with the UI elements present in the code and do not introduce new elements.\n- *Maintain UI Integrity*: Each functionality should be added and the structure and design of the existing UI code must remain completely unchanged."
+        print("Generating prompt 3 for with More requirements")
 
-    response_5 = get_response(thread_id, assistant_id, payload)
-    print(response_5)
+    response_4 = get_response(thread_id,assistant_id,payload)
+    print(response_4)
 
-    response_final = response_5
+    response_final = response_4
 
     retrieve_current_files_and_remove(vector_id)
-    
-# -----------ENDING adding functionalities to the code----------------
 
-# ------------Validating itself----------------
+    #storing the user styles data files
+    status_project_code = store_project_data_locally(user_id,dir_path)
+
+    styles_id = ""
+
+    # styles_prompt = "Need to create response according to coding styles. \nHere is the short general description of content present in the coding styles: \n* architecture_used: Description about which architecture should be used to generate the code. e.g MVC, MVVM, etc. \n\n* state_management: Description about which state management tool should use to generate code. e.g for Flutter state management tools used are Provider, GetX, Redux, etc.\n\n* naming_conventions: Description about which type of naming convention should be used in code e.g PascalCase, camelCase, etc.\n\n* commenting_style: Description about how to use comment while generating the code. e.g Dense use of comment - here code should contain more comments explaining the functionality\n\n* code_structure: Explains project organization into directories by concern (e.g., utils, components, modules) and use of classes/functions for different parts of the application.\n\n* specific_patterns: Identifies common patterns that should be used if necessary while generating the code.\n\n* error_handling: Describes how the error handling should be implemented while generating the code. eg: use of throw and catch blocks, printing the errors.\n\n* indentation_style: Specifies indentation style, usually 2 spaces per level, using spaces instead of tabs.\n\n* libraries_frameworks: Lists primary libraries and frameworks used, which vary by tech stack (e.g., React, Angular, Vue for UI; Redux, MobX for state management).\n\n* overall_coding_habits: Describes coding habits, such as organizing code into modules, preferring a declarative style, using a specific state management library, and maintaining consistent structure for components.\nGenerated output must not contain any commentary or explanation."
+
+    # Fix the f-string issue by avoiding nested curly braces
     if status_project_code["status"] == "success":
-        payload = [{"type": "text", "text": f"{response_final}\n First breakdown step by step how and why you created this code also Can you check the code line by line and ensure that the code is properly structured and adhered to coding standards given above as well as functionalities in generated code. Ensure that the code contains proper explainatory commented and is according to the coding standards. Here is coding standards to check properly in json string: \n {data_content} \n Additionally, make sure that the code doesnot contain deprecated or error implementation."}]
-        response_interim1 = get_response(thread_id,assistant_id,payload)
-        print(response_interim1)
-    else:
-        payload = [{"type": "text", "text": f"{response_final}\n First breakdown step by step how and why you created this code also Can you check the code line by line and make sure that the code is properly structured and adhered to General coding standards as well as functionalities in generated code. Ensure that the code contains proper explainatory commented and is according to the best practice coding standards. \n Additionally, make sure that the code doesnot contain deprecated or error implementation."}]
-        response_interim1 = get_response(thread_id,assistant_id,payload)
-        print(response_interim1)
-# ------------ENDING Validating itself----------------
-    
-# -----------Correcting code a/c ui image----------------
+        data_content = status_project_code["data"]
+        payload = f"Restructure the generated code with the exact architecture, state management, code structure, adaptive and responsive design, app constants, and error handling as specified in the coding styles below. Ensure that the code is separated into the appropriate folders and files, with clear folder and file names displayed. Maintain all existing UI components and functionalities while applying the specified styles. Thoroughly verify that no part of the original code, especially UI elements, interactions, or functionality, is lost during the restructuring process. Use detailed checks to ensure all elements are correctly styled and integrated as per the guidelines.\n\nIf any ambiguity arises in implementing styles without affecting the codes functionality, maintain the original code logic, and add comments highlighting potential adjustments needed to fully align with the coding standards.\n\nCoding Styles are as follows:\n{data_content}\n"
 
-    print("Correcting the code according to the ui image")
-    payload = [{"type": "text", "text": f"Further Enhance the generated code, as the generated code might overlookedd certain UI elements, can you please check and fix the code such that it should be about 95% match according to the ui (keeping the adaptablity and coding styles unchanged.).Do not modify, alter, or loose the existing UI elements, layout, or structure in any way. See whichever elements is missing in the code or the position of the element is improper and modify the code accordingly, (Image url attached). Provide project structure with name for each file and provide complete formated code for the ui. \n for the generated project structure, please provide terminal command to create structure in ide. give two seperate commands for windows and macos, command should be one liner without any comments and discussion. it should be such that, code and project structure is setup directly by running the command."},{"type": "image_url","image_url": {"url": image_url}}]
+        print(payload)
 
-    response_6 = get_response(thread_id, assistant_id, payload)
-    print(response_6)
+    if status_project_code["status"] == "success":
+        print("Using the styles data")
+        # styles_prompt = "Need to create response according to coding styles. \nHere is the short general description of content present in the coding styles: \n* architecture_used: Description about which architecture should be used to generate the code. e.g MVC, MVVM, etc. \n\n* state_management: Description about which state management tool should use to generate code. e.g for Flutter state management tools used are Provider, GetX, Redux, etc.\n\n* naming_conventions: Description about which type of naming convention should be used in code e.g PascalCase, camelCase, etc.\n\n* commenting_style: Description about how to use comment while generating the code. e.g Dense use of comment - here code should contain more comments explaining the functionality\n\n* code_structure: Explains project organization into directories by concern (e.g., utils, components, modules) and use of classes/functions for different parts of the application.\n\n* specific_patterns: Identifies common patterns that should be used if necessary while generating the code.\n\n* error_handling: Describes how the error handling should be implemented while generating the code. eg: use of throw and catch blocks, printing the errors.\n\n* indentation_style: Specifies indentation style, usually 2 spaces per level, using spaces instead of tabs.\n\n* libraries_frameworks: Lists primary libraries and frameworks used, which vary by tech stack (e.g., React, Angular, Vue for UI; Redux, MobX for state management).\n\n* overall_coding_habits: Describes coding habits, such as organizing code into modules, preferring a declarative style, using a specific state management library, and maintaining consistent structure for components.\nGenerated output must not contain any commentary or explanation."
+        # Fix the f-string issue by avoiding nested curly braces
+        data_content = status_project_code["data"]
+        payload = f"Restructure the generated code with the exact architecture, state management, code structure, adaptive and responsive design, app constants, and error handling as specified in the coding styles below. Ensure that the code is separated into the appropriate folders and files, with clear folder and file names displayed. Maintain all existing UI components and functionalities while applying the specified styles. Thoroughly verify that no part of the original code, especially UI elements, interactions, or functionality, is lost during the restructuring process. Use detailed checks to ensure all elements are correctly styled and integrated as per the guidelines.\n\nIf any ambiguity arises in implementing styles without affecting the codes functionality, maintain the original code logic, and add comments highlighting potential adjustments needed to fully align with the coding standards.\n\nCoding Styles are as follows:\n{data_content}\n"
+
+        print(payload)
+        response_5 = get_response(thread_id,assistant_id,payload)
+        response_final = response_5
+
+    print(response_final)
+
+    print("Correcting the code accoring to the ui image")
+    payload = [{"type": "text", "text": f"Enhance the generated code, as the generated code might miss certain UI elements, can you please fix the code such that it would be about 95% match according to the ui (keeping the adaptablity and coding styles unchanged.).Do not modify, alter, or loose the existing UI elements, layout, or structure in any way. See whichever elements is missing in the code or the spacing between the ui components is improper or the position of the element is improper and modify the code accordingly, Image url attached. Provide project structure with name for each file and try to give complete code for ui"},{"type": "image_url","image_url": {"url": image_url}}]
+    response_corr = get_response(thread_id,assistant_id,payload)
+    print(response_corr)
 
     try:
         deleted_document_file = delete_openai_files(file_id)
@@ -1408,39 +1352,31 @@ async def figma_custom_ui(item: Item):
     except:
         print("Unable to delete specified file")
 
-    deleted_vector_store = client.beta.vector_stores.delete(vector_store_id=vector_id)
+    #deleting the uploaded vector, so that i can create a new one
+    deleted_vector_store = client.beta.vector_stores.delete(
+        vector_store_id=vector_id
+    )
     print(deleted_vector_store)
 
     response = client.beta.assistants.delete(assistant_id)
     print(response)
 
-# -----------ENDING Correcting code a/c ui image----------------
+    figma_and_assets = {"figma_analysed_data":api_converted_data,"assets_used":assets_used}
 
     helping_data = {
-        "figma_data": api_converted_data,
+        "figma_data": json.dumps(figma_and_assets,indent=4,ensure_ascii=False),
         "user_requirements_data": added_requirements,
         "image_url": image_url,
-        "assets_used": assets_used,
     }
+
     print(helping_data)
     delete_folder_recursive(dir_path)
 
-    if response_final == "Failed":
-        store_error(
-            user_id, "/figma-custom-ui/", "assistant api failed to generate response"
-        )
-        print("Figma Custom UI - Failed")
-        return {
-            "status": "failed",
-            "data": json.dumps(helping_data, indent=4, ensure_ascii=False),
-        }
+    if response_corr=="Failed":
+        store_error(user_id,"/figma-custom-ui/","assistant api failed to generate response")
+        return {"status":"failed","data":json.dumps(helping_data,indent=4,ensure_ascii=False)}
     else:
-        print("Figma Custom UI - Success")
-        return {
-            "status": "success",
-            "response": response_6,
-            "data": json.dumps(helping_data, indent=4, ensure_ascii=False),
-        }
+        return {"status":"success","response":response_corr,"data":json.dumps(helping_data,indent=4,ensure_ascii=False)}
 
 @app.post("/new-functionalities/")
 async def new_functionalities(item: Item):
@@ -1684,7 +1620,6 @@ async def multiple_files_flow(item: Item):
     extra_data = temp_api_data["extra_data"]
 
     prompt = temp_data["prompt"]
-    is_screen_used = temp_data["is_screen"]
     user_role = temp_data["user_role"]
     image_url = temp_data["image_url"]
     assets_used = temp_data["assets_used"]
@@ -1693,7 +1628,6 @@ async def multiple_files_flow(item: Item):
 
     print("prompt: ", prompt)
     print("user_role: ", user_role)
-    print("is_screen_used: ",is_screen_used)
     print("image_url: ", image_url)
     print("assistant_id: ", assistant_id)
     print("thread_id: ", thread_id)
@@ -1701,44 +1635,7 @@ async def multiple_files_flow(item: Item):
     print("additional_requirements: ",additional_requirements)
     print("api_data: ",api_data)
     print("figma_api_data: ",figma_api_data)
-
-    #checking if the esential params is available
-
-    if is_screen_used == "yes":
-        #if figma data is null
-        if figma_api_data == "null" or figma_api_data == "":
-            #if image url is also null
-            if image_url == "null" or image_url == "":
-                store_error(user_id,"/figma-custom-ui/","Unable to fetch Figma Data and UI image")
-                return {"status":"failed","response":"Alert: Unable to fetch Figma Data and UI image\n1. Kindly check if you had entered a valid figma url\n2. You have a stable internet connection\n3. You had entered a valid Screen name in prompt."}
-            #if image url is not null
-            else:
-                store_error(user_id,"/figma-custom-ui/","Unable to fetch Figma Data")
-                return {"status":"failed","response":"Alert: Unable to fetch Figma Data\n1. Kindly check if you had entered a valid figma url\n2. You have a stable internet connection\n3. You had entered a valid Screen name in prompt."}
-        # if figma data is not null
-        else:
-            #if image url is null
-            if image_url == "null" or image_url == "":
-                store_error(user_id,"/figma-custom-ui/","Unable to fetch UI image")
-                return {"status":"failed","response":"Alert: Unable to fetch UI image\n1. Kindly check if you had entered a valid figma url\n2. You have a stable internet connection\n3. You had entered a valid Screen name in prompt."}
-            #if image url is not null
-            else:
-                print("Both image url and figma data is received")
-        
-        #if project code is present or not
-        if api_data == "null" or api_data == "":
-            store_error(user_id,"/figma-custom-ui/","Unable to fetch UI image")
-            return {"status":"failed","response":"Alert: Unable to fetch project code\n1. Kindly check if your VS code is opened\n2. Check if the HuTouch AI extension is installed on VS code\n3. There should not be more than one project opened in vs code at once\n4. Check if you have  a stable internet connection"}
-        else:
-            print("Project code received")
-    else:
-        #if project code is present or not
-        if api_data == "null" or api_data == "":
-            store_error(user_id,"/figma-custom-ui/","Unable to fetch UI image")
-            return {"status":"failed","response":"Alert: Unable to fetch project code\n1. Kindly check if your VS code is opened\n2. Check if the HuTouch AI extension is installed on VS code\n3. There should not be more than one project opened in vs code at once\n4. Check if you have  a stable internet connection"}
-        else:
-            print("Project code received")
-            
+  
     dir_path = create_user_directory(user_id)
     print(dir_path)
 
@@ -1807,75 +1704,78 @@ async def multiple_files_flow(item: Item):
         except:
             print("Some error ocurred while deleting the files")
 
-    if is_screen_used == "yes":
+    if image_url:        
         # add new screen
 
         # Prompt 1
         response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": "Examine the uploaded UI image and perform the following tasks:\n\nIdentify Components: List each visible component (e.g., buttons, text fields, icons, background colour/gradient) along with its exact position on the screen using relative positioning.\n\nDescribe Functionality: Explain the purpose and function of each component (e.g., what happens when the user interacts with it).\n\nDetect Repeatation: Identify components that are repeated or have same functions.\n\nImportant Notes:\n\nCover All Elements: Include every visible component in the UI; do not omit any item, no matter how small.\nDetail Repetative Elements: Highlight repeated structures clearly.\nEnsure that every component is accounted for with precise descriptions.\nDo not provide extra explanation or summary.",
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": image_url,
-                            },
-                        },
-                    ],
-                }
-            ],
+        model="gpt-4o",
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Examine the uploaded UI image and perform the following tasks:\n\nIdentify Components: List each visible component (e.g., buttons, text fields, icons, background colour/gradient) along with its exact position on the screen using relative positioning.\n\nDescribe Functionality: Explain the purpose and function of each component (e.g., what happens when the user interacts with it).\n\nDetect Repeatation: Identify components that are repeated or have same functions.\n\nImportant Notes:\n\nCover All Elements: Include every visible component in the UI; do not omit any item, no matter how small.\nDetail Repetative Elements: Highlight repeated structures clearly.\nEnsure that every component is accounted for with precise descriptions.\nDo not provide extra explanation or summary."},
+                    {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": image_url,
+                    },
+                    },
+                ],
+            }
+        ],
+        # max_tokens=1000,
         )
 
         response_1 = response.choices[0].message.content
-        print(response_1)
+        print(response_1) 
 
         multiple_file_name = []
         uploaded_file_ids = []
-
-        # Prompt2
+        
+        #Prompt2
         my_assistant = client.beta.assistants.create(
-            instructions="You are an Code assistant. \n   1. For the next 9-10 prompts, treat all interactions as part of a single task related to creating UI or coding from scratch. Do not lose context; keep track of all inputs and responses to ensure continuity in the design and coding process.\n        2. Build the UI or code sequentially based on user instructions. If a new prompt introduces changes or additions, integrate them without losing the overall structure and consistency of the previous work.\n        3. When generating UI, ensure that the design matches the description provided by the user up to 90%, with all specified components present. If the description evolves, adjust the code accordingly without losing context.\n",
+            instructions="You are an Code assistant. \n        1. For the next 9-10 prompts, treat all interactions as part of a single task related to creating UI or coding from scratch. Do not lose context; keep track of all inputs and responses to ensure continuity in the design and coding process.\n        2. Build the UI or code sequentially based on user instructions. If a new prompt introduces changes or additions, integrate them without losing the overall structure and consistency of the previous work.\n        3. When generating UI, ensure that the design matches the description provided by the user up to 90%, with all specified components present. If the description evolves, adjust the code accordingly without losing context.\n",
             name="Good Assistant",
             tools=[{"type": "file_search"}],
             model="gpt-4o",
         )
         print(my_assistant)
 
+        api_converted_data = ""
+        
         if figma_api_data != "":
-            api_converted_data = get_analyzed_api_data(
-                figma_api_data, image_url, dir_path
-            )
-            # Specify the filename
-            filename = dir_path + "/figma_data_file.txt"
-            write_code_to_file(filename, api_converted_data)
 
-        # creating the vector store
-        vector_store = client.beta.vector_stores.create(name="Uploaded Document files")
+            # api_converted_data = "Based on the Figma API response data and the provided UI image, here is an organized breakdown of the components shown in the UI screen:\n\n---\n\n### A. Header Section\n\n1. **Top Navigation Bar:**\n   - **Positioning and Sizing:** \n     - Position: `x: -676, y: -2272`\n     - Size: `width: 375, height: 54`\n   - **Shapes:** Rectangle\n   - **Fill Color:** Solid, rgba(1, 1, 1, 1)\n   - **Effects (Shadows):** \n     - Type: Drop Shadow\n     - Color: rgba(60, 60, 67, 0.29)\n     - Offset: `x: 0, y: 0.33`\n   - **Constraints:** Vertical: SCALE, Horizontal: SCALE\n\n2. **Instagram Logo (Center):**\n   - **Positioning and Sizing:**\n     - Position: `x: -326, y: -2466.33`\n     - Size: `width: 88, height: 24`\n   - **Shapes:** Combination of paths and vectors (Boolean operations)\n   - **Fill Color:** Various gradients and solid fills for different parts\n\n3. **Messenger Icon (Top Right):**\n   - **Positioning and Sizing:**\n     - Position: `x: -626, y: -2486`\n     - Size: `width: 24, height: 24`\n   - **Shapes:** Vector\n   - **Fill Color:** Solid, rgba(23, 122, 240, 1)\n   - **Constraints:** Vertical: SCALE, Horizontal: SCALE\n\n4. **Add Post Icon (Top Left):**\n   - **Positioning and Sizing:**\n     - Position: `x: -576, y: -2486`\n     - Size: `width: 24, height: 24`\n   - **Shapes:** Vector\n   - **Fill Color:** Solid, rgba(0, 0, 0, 1)\n   - **Constraints:** Vertical: SCALE, Horizontal: SCALE\n\n---\n\n### B. Story Section\n\n1. **Story Thumbnails:**\n   - **Positioning and Sizing:** Varies for each thumbnail (e.g., the first thumb is at `x: -676, y: -2244`, size: `width: 76, height: 76`)\n   - **Shapes:** Oval (Vector)\n   - **Fill Type:** Image\n   - **Stroke:** Color rgba(0, 0, 0, 0.1), Width: 0.5\n   - **Constraints:** Vertical: SCALE, Horizontal: SCALE\n\n2. **Story Thumbnails (More Icon):**\n   - **Shapes:** Boolean operation of several small circles\n   - **Fill Color:** Solid, rgba(216, 216, 216, 1)\n   - **Constraints:** Vertical: SCALE, Horizontal: SCALE\n\n---\n\n### C. Main Feed Section\n\n1. **Post Image:**\n   - **Positioning and Sizing:**\n     - Position: `x: -676, y: -2216`\n     - Size: `width: 375, height: 375`\n   - **Shapes:** Rectangle\n   - **Fill Type:** Image\n\n2. **Post Header:**\n   - **Positioning and Sizing:**\n     - Position: `x: -676, y: -2272`\n     - Size: `width: 375, height: 54`\n   - **Background Color:** Solid, rgba(1, 1, 1, 1)\n   - **Shadows:** \n     - Color: rgba(60, 60, 67, 0.3)\n     - Offset: `x: 0, y: 0.33`\n\n3. **User Profile Picture (Top Left of Post Header):**\n   - **Positioning and Sizing:**\n     - Positioned within the header at: `x: -666, y: -2261`\n     - Size: `width: 32, height: 32`\n   - **Shapes:** Oval (Vector)\n   - **Fill Type:** Image\n   - **Stroke:** Color rgba(0, 0, 0, 0.1), Width: 0.5\n\n4. **Username and Location:**\n   - **Positioning and Sizing:**\n     - Positioned within the header with username at `x: -624, y: -2242`\n     - Location below username\n   - **Text Details:**\n     - Font Size: Username (17), Location (14)\n     - Font Weight: Normal/Bold for username\n     - Font Family: San Francisco\n     - Text Color for Username: rgba(38, 38, 38, 1)\n     - Text Color for Location: rgba(38, 38, 38, 1)\n\n5. **More Icon (Top Right of Post Header):**\n   - **Positioning and Sizing:**\n     - Positioned within the header at: `x: -330, y: -2246.5`\n     - Size: `width: 14, height: 3`\n   - **Shapes:** Boolean operation\n   - **Fill Color:** Solid, rgba(216, 216, 216, 1)\n\n---\n\n### D. Interaction Buttons (Under Post Image)\n\n1. **Like Button:**\n   - **Positioning and Sizing:** Left-most icon (e.g., at `x: -626, y: -1829`)\n   - **Shapes:** Vector\n   - **Fill Color:** Solid, rgba(38, 38, 38, 1)\n   - **Constraints:** Vertical: SCALE, Horizontal: SCALE\n\n2. **Comment Button:**\n   - **Positioning and Sizing:** Next to Like button (e.g., at `x: -601, y: -1829`)\n   - **Shapes:** Vector\n   - **Fill Color:** Solid, rgba(38, 38, 38, 1)\n   - **Constraints:** Vertical: SCALE, Horizontal: SCALE\n\n3. **Share Button:**\n   - **Positioning and Sizing:** Positioned to the right of the Comment button\n   - **Shapes:** Vector\n   - **Fill Color:** Solid, rgba(38, 38, 38, 1)\n   - **Constraints:** Vertical: SCALE, Horizontal: SCALE\n\n4. **Save Button:**\n   - **Positioning and Sizing:** Positioned to the right-most of the interaction buttons\n   - **Shapes:** Vector\n   - **Fill Color:** Solid, rgba(38, 38, 38, 1)\n   - **Constraints:** Vertical: SCALE, Horizontal: SCALE\n\n---\n\n### E. Post Description and Comments\n\n1. **Text Elements (like description, comments):**\n   - **Positioning and Sizing:** Below the interaction buttons section\n   - **Font Details:** \n     - Font Size: Varies (e.g., 14 for comment text)\n     - Font Weight: Normal\n     - Font Family: San Francisco\n     - Text Color: rgba(38, 38, 38, 1)\n   - **Constraints:** Vertical: TOP, Horizontal: LEFT\n\n---\n\nThis comprehensive breakdown ensures coverage of all visible components in the provided UI image, based on the Figma API response data. The data provided includes details on positioning, sizing, colors, shapes, and other relevant properties."
+
+            api_converted_data = get_analyzed_api_data(figma_api_data,image_url,dir_path)
+            # Specify the filename
+            filename = dir_path + '/figma_data_file.txt'
+
+            write_code_to_file(filename,api_converted_data)
+
+        #creating the vector store
+        vector_store = client.beta.vector_stores.create(
+        name="Uploaded Document files"
+        )
         print(vector_store)
         vector_id = vector_store.id
-        print("vector_id: ", vector_id)
+        print("vector_id: ",vector_id)
 
-        # uploading the figma data assistant
-        upload_file_to_vector_store(dir_path + "/figma_data_file.txt", vector_id)
+        #uploading the figma data assistant
+        upload_file_to_vector_store(dir_path+"/figma_data_file.txt",vector_id)
         assistant_id = my_assistant.id
-        print("assistant_id: ", assistant_id)
-        print("vector_id: ", vector_id)
+        # print("file_id: ",file_id)
+        print("assistant_id: ",assistant_id)
+        print("vector_id: ",vector_id)
 
         if assets_used:
             try:
-                write_code_to_file(dir_path + "/assets_file.txt", assets_used)
-                assets_file_id = upload_document_file_to_openai(
-                    dir_path + "/assets_file.txt"
-                )
-                upload_file_to_vector_store(dir_path + "/assets_file.txt", vector_id)
+                write_code_to_file(dir_path+"/assets_file.txt",assets_used)
+                assets_file_id = upload_document_file_to_openai(dir_path+"/assets_file.txt")
+                upload_file_to_vector_store(dir_path+"/assets_file.txt",vector_id)
             except:
-                print("Some error occurred while using the file")
+                print("Some error occured while using the file")
                 assets_used = ""
             else:
                 print("Assets are empty")
@@ -1888,154 +1788,144 @@ async def multiple_files_flow(item: Item):
         print(updated_assistant)
 
         figma_info = "absoluteBoundingBox: Describes the absolute position and size of the element in the frame, here position is given in the form  of x and y coordinated with respect to the screen, so place the components at proper positions"
-        assets_info = 'The assets which can be used while generating the code is mentioned in uploaded file "assets info.txt" use whichever assets used as image or icon required to generate the code.'
+        assets_info = "The assets which can be used while generating the code is mentioned in uploaded file \"assets info.txt\" use whichever assets used as image or icon required to generate the code."
         if user_role == "Flutter Developer 2":
             print("In flutter dev prompt mode")
             payload = [
                 {
                     "type": "text",
-                    "text": f'Generate a {user_role} code with MVC architecture and proper State Management for the figma UI based on UI image, figma styling data(note: figma data is uploaded in figma_data_file.json file) and  Description of the UI: " {response_1} ".\nMake separate files for reusable components, classes, and assets. Also maintain Colors and Strings as a reusable component. \n Some information about figma data is: \n  Note: The colors in figma API data is in the form of RGBA format so add accurate colors in code \n{figma_info} \n Ensure the code includes: 1. Proper error handling for each code file and method. 2. Proper commenting so that every non-coder can also understand the code. 3. Provide only the exact code with file and folder names. No need to generate code for Status bar showing battery, time, etc.',
+                    "text": f"Generate a {user_role} code with MVC architecture and proper State Management for the figma UI based on UI image, figma styling data(note: figma data is uploaded in figma_data_file.json file) and  Description of the UI: \" {response_1} \".\nMake separate files for reusable components, classes, and assets. Also maintain Colors and Strings as a reusable component. \n Some information about figma data is: \n  Note: The colors in figma API data is in the form of RGBA format so add accurate colors in code \n{figma_info} \n Ensure the code includes: 1. Proper error handling for each code file and method. 2. Proper commenting so that every non-coder can also understand the code. 3. Provide only the exact code with file and folder names. No need to generate code for Status bar showing battery, time, etc."
                 },
-                {"type": "image_url", "image_url": {"url": image_url}},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": image_url}
+                }
             ]
         elif user_role == "Web Developer (HTML & CSS & JavaScript only)":
             payload = [
                 {
                     "type": "text",
-                    "text": f"Generate a code for given Web UI based on uploaded UI image, description of the UI and figma styling data (note: figma data is uploaded in figma_data_file.json file). Description of the UI: {response_1}. \nThe logic should be self-contained, ensuring that the code is fully functional without requiring additional user input. Refer to the common functionality steps provided in the file to create logic for each component. Avoid adding new functionalities; focus on creating exact same elements present in the UI.\n\nPlease ensure the code includes:\n\nProper error handling for each function to manage exceptions gracefully.\nDetailed comments in both the HTML and JavaScript files.\nAccurate file and folder names for the HTML, CSS, and JavaScript files involved, reflecting the exact structure needed.\nProvide the updated project structure.",
+                    "text": f"Generate a code for given Web UI based on uploaded UI image, description of the UI and figma styling data (note: figma data is uploaded in figma_data_file.json file). Description of the UI: {response_1}. \nThe logic should be self-contained, ensuring that the code is fully functional without requiring additional user input. Refer to the common functionality steps provided in the file to create logic for each component. Avoid adding new functionalities; focus on creating exact same elements present in the UI.\n\nPlease ensure the code includes:\n\nProper error handling for each function to manage exceptions gracefully.\nDetailed comments in both the HTML and JavaScript files.\nAccurate file and folder names for the HTML, CSS, and JavaScript files involved, reflecting the exact structure needed.\nProvide the updated project structure."
                 },
-                {"type": "image_url", "image_url": {"url": image_url}},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": image_url}
+                }
             ]
         else:
             print("Generating Prompt 2")
 
             if assets_used != "null" and assets_used != "":
                 print("Using assets to generate code")
-                payload = [
-                    {
-                        "type": "text",
-                        "text": f'First breakdown step by step how you would implement this and then Generate a {user_role} code for the figma UI based on UI image, figma styling data(note: figma data is uploaded in figma_data_file.txt file) and  Description of the UI: " {response_1} ".\n Some information about figma data is: \n  Note: The colors in figma api data is in the form of RGBA format so make so add accurate colors in code \n{figma_info} \n No need to generate code for Status bar showing battery, time, etc.\nMake components reusable instead of hardcoding repetative components to avoid duplicate code. {assets_info}\nGenerated code must contain some explanatory comments.\nThe generated output must not contain any unwanted commentary or explanation of the output. \n Also Make sure the generated code doesnot include deprecated snippets or imports also the generated code is without any error.',
-                    },
-                    {"type": "image_url", "image_url": {"url": image_url}},
-                ]
+                payload = [{"type": "text", "text": f"Generate a {user_role} code for the figma UI based on UI image, figma styling data(note: figma data is uploaded in figma_data_file.txt file) and  Description of the UI: \" {response_1} \".\n Some information about figma data is: \n  Note: The colors in figma api data is in the form of RGBA fromat so make so add accurate colors in code \n{figma_info} \n No need to generate code for Status bar showing battery, time, etc.\nMake components reusable instead of hardcoding repetative components to avoid duplicate code. {assets_info}\nGenerated code must contain some explanatory comments.\nThe generated output must not contain any unwanted commentary or explanation of the output"},{"type": "image_url","image_url": {"url": image_url}}]
             else:
                 print("Not using assets")
-                payload = [
-                    {
-                        "type": "text",
-                        "text": f'First breakdown step by step how you would implement this and then Generate a {user_role} code for the figma UI based on UI image, figma styling data(note: figma data is uploaded in figma_data_file.txt file) and  Description of the UI: " {response_1} ".\n Some information about figma data is: \n  Note: The colors in figma api data is in the form of RGBA format so make so add accurate colors in code \n{figma_info} \n No need to generate code for Status bar showing battery, time, etc.\nMake components reusable instead of hardcoding repetative components to avoid duplicate code\nGenerated code must contain some explanatory comments.\nThe generated output must not contain any unwanted commentary or explanation of the output. \n Also Make sure the generated code doesnot include deprecated snippets or imports also the generated code is without any error.',
-                    },
-                    {"type": "image_url", "image_url": {"url": image_url}},
-                ]
+                payload = [{"type": "text", "text": f"Generate a {user_role} code for the figma UI based on UI image, figma styling data(note: figma data is uploaded in figma_data_file.txt file) and  Description of the UI: \" {response_1} \".\n Some information about figma data is: \n  Note: The colors in figma api data is in the form of RGBA fromat so make so add accurate colors in code \n{figma_info} \n No need to generate code for Status bar showing battery, time, etc.\nMake components reusable instead of hardcoding repetative components to avoid duplicate code\nGenerated code must contain some explanatory comments.\nThe generated output must not contain any unwanted commentary or explanation of the output"},{"type": "image_url","image_url": {"url": image_url}}]
 
-        response_2 = get_response(thread_id, assistant_id, payload)
+        response_2 = get_response(thread_id,assistant_id,payload)
         print(response_2)
+
+        payload = [{"type": "text", "text": f"The generated code doesn't contain proper screen adaptability. The code must be such that it should adapt seamlessly to different screen sizes and orientations. The component should resize text, images, and interactive elements appropriately based on the screen size. Refer uploaded ui image to study ui. Generate entire code without any commentory and explanation"},{"type": "image_url","image_url": {"url": image_url}}]
+        response_interim = get_response(thread_id,assistant_id,payload)
+        print(response_interim)
+        
+        retrieve_current_files_and_remove(vector_id)
+
+        print("Correcting the code accoring to the ui image")
+        payload = [{"type": "text", "text": f"The generated UI is not proper and is not matching with the UI image can you please fix the code such that it would be exactly according to the ui. See whichever elements is missing in the code or the spacing between the ui components is improper or the position of the element is improper and modify the code accordingly"},{"type": "image_url","image_url": {"url": image_url}}]
+
+        response_3 = get_response(thread_id,assistant_id,payload)
+        print(response_3)
+
+        if additional_requirements != "":
+            write_code_to_file(dir_path+"/More requirements.txt",additional_requirements)
+            print("More requirements was successfully made")
+            upload_file_to_vector_store(dir_path+"/More requirements.txt",vector_id)
+        else:
+            print("Additional requirements doesn't exist")
+
+        upload_file_to_vector_store("Common_Functionality.json",vector_id)
+
+        # prompt 3
+
+        print(thread_id)
+
+        if additional_requirements=="":
+            payload = "The current generated code needs functionalities added to it. Refer to \"Common_Functionality.json\" for available functionality descriptions. This file contains common functionalities with the following details:\n- *Functionality Name*: The name of the functionality.\n- *Description*: Steps to implement the functionality.\n- *Type*: Specifies the type of UI element the functionality is linked to.\n\n### Instructions:\n1. *Strictly Maintain the Existing UI Structure*: Do not modify, alter, or disturb the existing UI elements, layout, or structure in any way. Only focus on adding the required functionalities.\n   \n2. *Match Functionalities to Existing UI Elements*: Implement only those functionalities that directly correspond to UI elements already present in the code. Avoid creating new UI elements (e.g., text boxes, buttons) that are not already in the design, even if the functionality suggests it.\n\n3. *Avoid Unnecessary Additions*: If a functionality in \"Common_Functionality.json\" does not naturally fit the existing UI elements, do not implement it. For instance, if the code has a \"Sign up with Email\" button but no email text box, do not add the text box. Only apply functionalities that match the current UI elements without altering or adding new UI components.\n\n4. *Do Not Assume Functionalities*: Only implement functionalities that are clearly defined and directly applicable to existing elements. Do not assume or create new features that are not explicitly needed by the UI.\n\n5. *Seamless Integration*: Ensure that added functionalities integrate smoothly with the existing code without breaking or changing the design or structure of the UI.\n\n6. *No Extra Commentary or Unnecessary Code Changes*: Focus solely on implementing the relevant functionalities. Avoid adding any explanations or changes that are not directly related to the functional aspects.\n\n### Output Expectations:\n- *Functionality Alignment*: Ensure all functionalities align with the UI elements present in the code and do not introduce new elements.\n- *Maintain UI Integrity*: The structure and design of the existing UI code must remain completely unchanged.\n- *Precision and Relevance*: Only add what is necessary and relevant. Do not add functionalities that require UI modifications unless those elements already exist in the current code."    
+            print("Generating prompt 3 normally")
+        else:
+            payload = "The current generated code needs functionalities added to it. Refer to \"More requirements.txt\" for available functionality descriptions. This file contains functionalities description, analyze it and strictly add every mentioned functionality from the file.\n\n### Instructions:\n1. *Strictly Maintain the Existing UI Structure*: Do not modify, alter, or disturb the existing UI elements, layout, or structure in any way. Only focus on adding the mentioned functionalities.\n\n2. *Do Not Assume Functionalities*: Only implement functionalities that are clearly defined and directly applicable to existing elements. Do not assume or create new features that are not explicitly needed by the UI.\n\n3. *Seamless Integration*: Ensure that added functionalities integrate smoothly with the existing code without breaking or changing the design or structure of the UI.\n\n4. *No Extra Commentary or Unnecessary Code Changes*: Focus solely on implementing the relevant functionalities. Avoid adding any explanations or changes that are not directly related to the functional aspects.\n\n### Output Expectations:\n- *Functionality Alignment*: Ensure all functionalities align with the UI elements present in the code and do not introduce new elements.\n- *Maintain UI Integrity*: Each functionality should be added and the structure and design of the existing UI code must remain completely unchanged."
+            print("Generating prompt 3 for with More requirements")
+        
+        response_4 = get_response(thread_id,assistant_id,payload)
+        print(response_4)
+
+        response_final = response_4
 
         retrieve_current_files_and_remove(vector_id)
 
-        print("Correcting the code according to the UI image")
-        payload = [
-            {
-                "type": "text",
-                "text": f"The generated UI is not proper and is not matching with the UI image can you please fix the code such that it would be exactly according to the ui. See whichever elements is missing in the code or the spacing between the ui components is improper or the position of the element is improper and modify the code accordingly",
-            },
-            {"type": "image_url", "image_url": {"url": image_url}},
-        ]
-
-        response_3 = get_response(thread_id, assistant_id, payload)
-        print(response_3)
-        
-        # storing the user styles data files
-        status_project_code = store_project_data_locally(user_id, dir_path)
+        #storing the user styles data files
+        status_project_code = store_project_data_locally(user_id,dir_path)
 
         styles_id = ""
         if status_project_code["status"] == "success":
             print("Uploading the styles file to vector store")
-
+            
             try:
-                with open(dir_path + "/project_style_data.json", "w") as file:
+                with open(dir_path+"/project_style_data.json", 'w') as file:
                     data = json.loads(status_project_code["data"])
                     json.dump(data, file)
             except:
-                print("Error while creating the file")
+                print("error while creating the file")
 
             created_file = client.files.create(
-                file=open(dir_path + "/project_style_data.json", "rb"),
-                purpose="assistants",
+                file=open(dir_path+"/project_style_data.json", "rb"),
+                purpose="assistants"
             )
-            print("created_file: ", created_file)
+            print("created_file: ",created_file)
 
             styles_id = created_file.id
 
             vector_store_file = client.beta.vector_stores.files.create(
-                vector_store_id=vector_id, file_id=styles_id
+                vector_store_id=vector_id,
+                file_id=styles_id
             )
             print(vector_store_file)
             print("File was successfully uploaded")
 
         if status_project_code["status"] == "success":
             print("Using the styles data")
+            # styles_prompt = "Need to create response according to coding styles. \nHere is the short general description of content present in the coding styles: \n* architecture_used: Description about which architecture should be used to generate the code. e.g MVC, MVVM, etc. \n\n* state_management: Description about which state management tool should use to generate code. e.g for Flutter state management tools used are Provider, GetX, Redux, etc.\n\n* naming_conventions: Description about which type of naming convention should be used in code e.g PascalCase, camelCase, etc.\n\n* commenting_style: Description about how to use comment while generating the code. e.g Dense use of comment - here code should contain more comments explaining the functionality\n\n* code_structure: Explains project organization into directories by concern (e.g., utils, components, modules) and use of classes/functions for different parts of the application.\n\n* specific_patterns: Identifies common patterns that should be used if necessary while generating the code.\n\n* error_handling: Describes how the error handling should be implemented while generating the code. eg: use of throw and catch blocks, printing the errors.\n\n* indentation_style: Specifies indentation style, usually 2 spaces per level, using spaces instead of tabs.\n\n* libraries_frameworks: Lists primary libraries and frameworks used, which vary by tech stack (e.g., React, Angular, Vue for UI; Redux, MobX for state management).\n\n* overall_coding_habits: Describes coding habits, such as organizing code into modules, preferring a declarative style, using a specific state management library, and maintaining consistent structure for components.\nGenerated output must not contain any commentary or explanation."
+            # Fix the f-string issue by avoiding nested curly braces
             data_content = status_project_code["data"]
             payload = f"Restructure the generated code with the exact architecture, state management, code structure, adaptive and responsive design, app constants, and error handling as specified in the coding styles below. Ensure that the code is separated into the appropriate folders and files, with clear folder and file names displayed. Maintain all existing UI components and functionalities while applying the specified styles. Thoroughly verify that no part of the original code, especially UI elements, interactions, or functionality, is lost during the restructuring process. Use detailed checks to ensure all elements are correctly styled and integrated as per the guidelines.\n\nIf any ambiguity arises in implementing styles without affecting the codes functionality, maintain the original code logic, and add comments highlighting potential adjustments needed to fully align with the coding standards.\n\nCoding Styles are as follows:\n{data_content}\n"
 
             print(payload)
-            response_5 = get_response(thread_id, assistant_id, payload)
-
-        if additional_requirements != "":
-            write_code_to_file(
-                dir_path + "/More requirements.txt", additional_requirements
-            )
-            print("More requirements was successfully made")
-            upload_file_to_vector_store(dir_path + "/More requirements.txt", vector_id)
-        else:
-            print("Additional requirements don't exist")
-
-        upload_file_to_vector_store("Common_Functionality.json", vector_id)
-
-        # prompt 3
-
-        print(thread_id)
-
-        if additional_requirements == "":
-            payload = 'The current generated code needs functionalities added to it. Refer to "Common_Functionality.json" for available functionality descriptions. This file contains common functionalities with the following details:\n- *Functionality Name*: The name of the functionality.\n- *Description*: Steps to implement the functionality.\n- *Type*: Specifies the type of UI element the functionality is linked to.\n\n### Instructions:\n1. *Strictly Maintain the Existing UI Structure*: Do not modify, alter, or disturb the existing UI elements, layout, or structure in any way. Only focus on adding the required functionalities.\n   \n2. *Match Functionalities to Existing UI Elements*: Implement only those functionalities that directly correspond to UI elements already present in the code. Avoid creating new UI elements (e.g., text boxes, buttons) that are not already in the design, even if the functionality suggests it.\n\n3. *Avoid Unnecessary Additions*: If a functionality in "Common_Functionality.json" does not naturally fit the existing UI elements, do not implement it. For instance, if the code has a "Sign up with Email" button but no email text box, do not add the text box. Only apply functionalities that match the current UI elements without altering or adding new UI components.\n\n4. *Do Not Assume Functionalities*: Only implement functionalities that are clearly defined and directly applicable to existing elements. Do not assume or create new features that are not explicitly needed by the UI.\n\n5. *Seamless Integration*: Ensure that added functionalities integrate smoothly with the existing code without breaking or changing the design or structure of the UI.\n\n6. *No Extra Commentary or Unnecessary Code Changes*: Focus solely on implementing the relevant functionalities. Avoid adding any explanations or changes that are not directly related to the functional aspects.\n\n### Output Expectations:\n- *Functionality Alignment*: Ensure all functionalities align with the UI elements present in the code and do not introduce new elements.\n- *Maintain UI Integrity*: The structure and design of the existing UI code must remain completely unchanged.\n- *Precision and Relevance*: Only add what is necessary and relevant. Do not add functionalities that require UI modifications unless those elements already exist in the current code.'
-            print("Generating prompt 3 normally")
-        else:
-            payload = 'The current generated code needs functionalities added to it. Refer to "More requirements.txt" for available functionality descriptions. This file contains functionalities description, analyze it and strictly add every mentioned functionality from the file.\n\n### Instructions:\n1. *Strictly Maintain the Existing UI Structure*: Do not modify, alter, or disturb the existing UI elements, layout, or structure in any way. Only focus on adding the mentioned functionalities.\n\n2. *Do Not Assume Functionalities*: Only implement functionalities that are clearly defined and directly applicable to existing elements. Do not assume or create new features that are not explicitly needed by the UI.\n\n3. *Seamless Integration*: Ensure that added functionalities integrate smoothly with the existing code without breaking or changing the design or structure of the UI.\n\n4. *No Extra Commentary or Unnecessary Code Changes*: Focus solely on implementing the relevant functionalities. Avoid adding any explanations or changes that are not directly related to the functional aspects.\n\n### Output Expectations:\n- *Functionality Alignment*: Ensure all functionalities align with the UI elements present in the code and do not introduce new elements.\n- *Maintain UI Integrity*: Each functionality should be added and the structure and design of the existing UI code must remain completely unchanged.'
-            print("Generating prompt 3 for with More requirements")
-
-        response_4 = get_response(thread_id, assistant_id, payload)
-        print(response_4)
-
-        response_final = response_4
+            response_5 = get_response(thread_id,assistant_id,payload)
+            response_final = response_5
         
-        if status_project_code["status"] == "success":
-            payload = [{"type": "text", "text": f"{response_final}\n First breakdown step by step how and why you created this code also Can you check the code line by line and ensure that the code is properly structured and adhered to coding standards given above as well as functionalities in generated code. Ensure that the code contains proper explainatory commented and is according to the coding standards. Here is coding standards to check properly in json string: \n {data_content} \n Additionally, make sure that the code doesnot contain deprecated or error implementation."}]
-            response_interim1 = get_response(thread_id,assistant_id,payload)
-            print(response_interim1)
-        else:
-            payload = [{"type": "text", "text": f"{response_final}\n First breakdown step by step how and why you created this code also Can you check the code line by line and make sure that the code is properly structured and adhered to General coding standards as well as functionalities in generated code. Ensure that the code contains proper explainatory commented and is according to the best practice coding standards. \n Additionally, make sure that the code doesnot contain deprecated or error implementation."}]
-            response_interim1 = get_response(thread_id,assistant_id,payload)
-            print(response_interim1)
-
-        retrieve_current_files_and_remove(vector_id)
-
-        print("Correcting the code according to the UI image")
-        payload = [
-            {
-                "type": "text",
-                "text": f"Enhance the generated code, as the generated code might miss certain UI elements, can you please fix the code such that it would be about 95% match according to the ui (keeping the adaptablity and coding styles unchanged.).Do not modify, alter, or loose the existing UI elements, layout, or structure in any way. See whichever elements is missing in the code or the spacing between the ui components is improper or the position of the element is improper and modify the code accordingly, Image url attached. Provide project structure with name for each file and try to give complete code for ui",
-            },
-            {"type": "image_url", "image_url": {"url": image_url}},
-        ]
-        response_corr = get_response(thread_id, assistant_id, payload)
+        print("Correcting the code accoring to the ui image")
+        payload = [{"type": "text", "text": f"Enhance the generated code, as the generated code might miss certain UI elements, can you please fix the code such that it would be about 95% match according to the ui (keeping the adaptablity and coding styles unchanged.).Do not modify, alter, or loose the existing UI elements, layout, or structure in any way. See whichever elements is missing in the code or the spacing between the ui components is improper or the position of the element is improper and modify the code accordingly, Image url attached. Provide project structure with name for each file and try to give complete code for ui"},{"type": "image_url","image_url": {"url": image_url}}]
+        response_corr = get_response(thread_id,assistant_id,payload)
         print(response_corr)
 
         isValid = False
         try:
             api_data_json_1 = json.loads(api_data)
+            #condition to reduce the length of data
+            # api_data_json = []
+            # if "flutter" in user_role.lower():
+            #     api_data_json =  filter_json_objects(api_data_json_1,"lib")
+            # elif "react native" in user_role.lower():
+            #     api_data_json =  filter_json_objects(api_data_json_1,"src")
+            # else:
+            #     api_data_json = api_data_json_1
+
             api_data_json = api_data_json_1
+
             isValid = True
             print("It's a valid JSON")
+
             for files in api_data_json:
                 file_name = get_file_name(files["file_path"])
                 files["file_path"] = file_name
@@ -2046,18 +1936,25 @@ async def multiple_files_flow(item: Item):
 
         if isValid:
             for item in api_data_json:
-                code = item["content"]
-                onlyName = remove_extension(item["file_path"])
-                filename = dir_path + "/" + onlyName + ".txt"
+                code = item['content']
+                onlyName=remove_extension(item['file_path'])
+                filename = dir_path+'/'+onlyName + '.txt'
                 multiple_file_name.append(filename)
                 write_code_to_file(filename, code)
                 print(f"Code written to {filename}")
 
                 if onlyName == "Readme":
                     read_me_content = code
+            # store_name = "Uploaded files to Store"
+            # vector_store = client.beta.vector_stores.create(name=store_name)
+            # vector_id = vector_store.id
 
             for files in multiple_file_name:
                 upload_file_to_vector_store(files, vector_id)
+
+            # upload_file_to_vector_store("Common_Functionality.json",vector_id)
+            # uploaded_file_ids.append(file_id)
+            # print("Common Functionality file was successfully uploaded")
 
             assistant = client.beta.assistants.update(
                 assistant_id=assistant_id,
@@ -2068,46 +1965,16 @@ async def multiple_files_flow(item: Item):
         else:
             print("No files uploaded")
 
-        payload = f"Generated response signifies a new screen along with its components and state management that need to be added into the existing project. Note: Don't replace or remove any existing screen or component. If the project follows a particular statemanagement then add the newly generate states into the existing state. The project files are uploaded, analyze it and check if there are any components which are similar in new screen and if there is then 're-use' the code and don't do the repetative work. Generate accurate response and give full code. This is the existing project structure:\n{read_me_content}.\n please digest this information and once you understand existing code then Give me production ready code which is formatted, with their projected structure and file/folder name for each genereated code."
-        response_6 = get_response(thread_id, assistant_id, payload)
+        payload = f"Generated response signifies a new screen along with its components and statemanagement that need to be added into the existing project. Note: Don't replace or remove any existing screen or component. If the project follows a particular statemanagement then add the newly generate states into the existing state. The project files are uploaded, analyze it and check if there are any components which are similar in new screen and if there is then 're-use' the code and don't do the redundant work. Generate accurate response and give full code. This is the existing project structure:\n{read_me_content}."
+        response_6 = get_response(thread_id,assistant_id,payload)
         print(response_6)
 
         final_response = response_6
-        
-        figma_and_assets = {"figma_analysed_data": api_converted_data, "assets_used": assets_used}
 
+        figma_and_assets = {"figma_analysed_data":api_converted_data,"assets_used":assets_used}  
+      
     else:
         #add new functionality & update funtionality
-
-        txt_content = f"You are given two inputs: a UI image and a message. Your task is to identify if any elements mentioned in the message are present in the UI image. Specifically, look for any components or words from the message within the UI. Compare adjacent word combinations from the message with elements visible in the UI. If you find any matches, output them as an array of strings representing the words from the message that match elements in the UI. If no matches are found, output an empty array.\n\nInput Examples:\n\nMessage: \"In main_page.dart, add a search bar and modify the code accordingly.\"\n\nOutput: [\"search bar\"] if the corresponding UI element is found.\n\nMessage: \"Update the button styles in home_page.dart.\"\n\nOutput: [] if no corresponding elements are found.\n\nOutput Requirements:\n\nIf an element is found, output in the format: [\"Element 1\", \"Element 2\"].\nIf no elements are found, output an empty array: [].\n\nInput:\n\nMessage: {prompt}\nUI Image: [Uploaded image]\n\nEnsure the response strictly follows the format specified, with no additional commentary or explanation."
-        list_of_elements_found = []
-
-        if image_url !="" and api_data !="":
-            # Prompt 1
-            response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": txt_content},
-                        {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": image_url,
-                        },
-                        },
-                    ],
-                }
-            ],
-            # max_tokens=1000,
-            )
-
-            response_elems = response.choices[0].message.content
-            print(response_elems)
-
-            list_of_elements_found = json.loads(response_elems)
-            print(list_of_elements_found)
 
         completion = client.chat.completions.create(
             model="gpt-3.5-turbo",
@@ -2148,8 +2015,6 @@ async def multiple_files_flow(item: Item):
 
         vector_id = "" ## changes done
 
-        vector_id = "" ## changes done
-
         if isValid:
             multiple_file_name = []
             uploaded_file_ids = []
@@ -2166,7 +2031,7 @@ async def multiple_files_flow(item: Item):
 
             for files in multiple_file_name:
                 upload_file_to_vector_store(files, vector_id)
-
+        
             if additional_requirements!="":
                 try:
                     write_code_to_file(dir_path+"/More requirements.txt",additional_requirements)
@@ -2175,19 +2040,6 @@ async def multiple_files_flow(item: Item):
                     print("More requirements file was successully uploaded")
                 except:
                     print("Error uploading more requirements file")
-
-            if assets_used != "null" and assets_used != "":
-                try:
-                    write_code_to_file(dir_path+"/assets_file.txt",assets_used)
-                    assets_file_id = upload_document_file_to_openai(dir_path+"/assets_file.txt")
-                    vector_store_file = client.beta.vector_stores.files.create(
-                    vector_store_id=vector_id,
-                    file_id=assets_file_id
-                    )
-                    print(vector_store_file)
-                except:
-                    print("Some error occured while using the file")
-                    assets_used = ""
 
             updated_assistant = client.beta.assistants.update(
                 assistant_id=assistant_id,
@@ -2199,47 +2051,21 @@ async def multiple_files_flow(item: Item):
             print(empty_thread)
             thread_id = empty_thread.id
             
-            if len(list_of_elements_found) == 0:
-                print("No element found so not using figma data and coding styles")
-                if additional_requirements == "":
-                    payload = f"{prompt} \n. The code is uploaded refer it. Don't provide any unwanted explanation or commentary, give me only exact code with file and folder name."
-                else:
-                    payload = prompt + " . Make the necessary changes as specified in the \"More requirements.txt\" file uploaded. Provide only the exact code with the specified file and folder names, without any additional explanations or commentary."
-                
-                response = get_response(thread_id, assistant_id, payload)
-                print(response)
-
-                final_response = response
-                figma_and_assets = {"figma_analysed_data":"","assets_used":assets_used}
-
+            if additional_requirements == "":
+                payload = f"{prompt} \n. The code is uploaded refer it. Don't provide any unwanted explanation or commentary, give me only exact code with file and folder name."
             else:
-                print("Element found so need to use figma data and coding styles")
-                figma_data = get_exact_api_data(figma_api_data,response_elems,image_url,dir_path)
-
-                if additional_requirements == "":
-                    print("Not using additional requirements")
-                    payload = [{"type": "text", "text": f"{prompt} . \nThe code is uploaded refer it. \nAnalyze the ui image and figma data and make modifications according to it \nThe figma data that would be required to create the ui element is given below \n{figma_data}\nThe assets used in the project is also uploaded as \"assets_file.txt\" if required make use of assets from it to make modifications\nDon\'t provide any unwanted explanation or commentary, give me only exact code with file and folder name."},{"type": "image_url","image_url": {"url": image_url}}]
-                    # payload = f"{prompt} \n. The code is uploaded refer it. Don't provide any unwanted explanation or commentary, give me only exact code with file and folder name."
-                else:
-                    print("using additional requirements")
-                    payload = [{"type": "text", "text": prompt + f" . Make the necessary changes as specified in the \"More requirements.txt\" file uploaded. \nAnalyze the ui image and figma data and make modifications according to it \nThe figma data that would be required to create the ui element is given below \n{figma_data}\nThe assets used in the project is also uploaded as \"assets_file.txt\" if required make use of assets from it to make modifications\nProvide only the exact code with the specified file and folder names, without any additional explanations or commentary."},{"type": "image_url","image_url": {"url": image_url}}] 
-
-                        
-                response = get_response(thread_id, assistant_id, payload)
-                print(response)
-
-                payload = [{"type": "text", "text": f"The generated code for the component {response_elems} doesn't match with the one present in the ui, can you make it similar to the one present in ui image. Generate the entire code for {response_elems}"},{"type": "image_url","image_url": {"url": image_url}}]
-                response = get_response(thread_id, assistant_id, payload)
-                print(response)
-                
-                final_response = response
-                
-                figma_and_assets = {"figma_analysed_data":figma_data,"assets_used":assets_used}
-
+                payload = prompt + " . Make the necessary changes as specified in the \"More requirements.txt\" file uploaded. Provide only the exact code with the specified file and folder names, without any additional explanations or commentary."
+                            
+            response = get_response(thread_id, assistant_id, payload)
+            print(response)
+        
+            final_response = response
+        
         else:
             print("Didn't got data from extension")
             final_response = "Error while fetching data from extension"
-
+        
+        figma_and_assets = {"figma_analysed_data":"","assets_used":assets_used}
 
     if uploaded_file_ids:
         print("deleting openai files")
@@ -2268,7 +2094,7 @@ async def multiple_files_flow(item: Item):
     delete_local_file(dir_path+"/figma_api_data.json")
     delete_local_file(dir_path+"/output.png")
         
-    figma_and_assets = {"figma_analysed_data":figma_and_assets,"assets_used":assets_used}
+    figma_and_assets = {"figma_analysed_data":api_converted_data,"assets_used":assets_used}
 
     helping_data = {
         "figma_data": json.dumps(figma_and_assets,indent=4,ensure_ascii=False),
@@ -2424,8 +2250,8 @@ async def analyze_files(item: Item):
     
     return {"status":"failed"}
 
-def get_exact_api_data(api_data,list_of_elem,image_url,dir_path):
-
+def get_exact_api_data(api_data,list_of_elem,dir_path):
+    
     print("List of elements: ",list_of_elem)
     # print("api_data: ",api_data)
 

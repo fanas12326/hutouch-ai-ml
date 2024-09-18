@@ -17,3 +17,4 @@ pandas
 Pillow
 spacy
 starlette
+memory-profiler
