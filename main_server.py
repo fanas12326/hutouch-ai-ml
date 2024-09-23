@@ -506,7 +506,7 @@ async def figma_custom_ui(item: Item):
 
     temp_data = item.prompt
     data_json_obj = json.loads(temp_data)
-
+    is_styles_used = "no"
     image_url = data_json_obj["image_url"]
     user_role = data_json_obj["user_role"]
     assets_used = data_json_obj["assets_used"]
@@ -521,17 +521,17 @@ async def figma_custom_ui(item: Item):
         #if image url is also null
         if image_url == "null" or image_url == "":
             store_error(user_id,"/figma-custom-ui/","Unable to fetch Figma Data and UI image")
-            return {"status":"failed","response":"Alert: Unable to fetch Figma Data and UI image\n1. Kindly check if you had entered a valid figma url\n2. You have a stable internet connection\n3. You had entered a valid Screen name in prompt."}
+            return {"status":"failed","response":"Screen not found. Please use Upload button to provide the Figma where the screen exists"}
         #if image url is not null
         else:
             store_error(user_id,"/figma-custom-ui/","Unable to fetch Figma Data")
-            return {"status":"failed","response":"Alert: Unable to fetch Figma Data\n1. Kindly check if you had entered a valid figma url\n2. You have a stable internet connection\n3. You had entered a valid Screen name in prompt."}
+            return {"status":"failed","response":"We've encountered a glitch, please try again. If you see this error again, please add comments"}
     # if figma data is not null
     else:
         #if image url is null
         if image_url == "null" or image_url == "":
             store_error(user_id,"/figma-custom-ui/","Unable to fetch UI image")
-            return {"status":"failed","response":"Alert: Unable to fetch UI image\n1. Kindly check if you had entered a valid figma url\n2. You have a stable internet connection\n3. You had entered a valid Screen name in prompt."}
+            return {"status":"failed","response":"We've encountered a glitch, please try again. If you see this error again, please add comments"}
         #if image url is not null
         else:
             logging.info("Both image url and figma data is received")
@@ -765,6 +765,7 @@ async def figma_custom_ui(item: Item):
         logging.info(payload)
 
     if status_project_code["status"] == "success":
+        is_styles_used = "yes"
         logging.info("Using the styles data")
         data_content = status_project_code["data"]
         payload = f"Restructure the generated code with the exact architecture, state management, code structure, adaptive and responsive design, app constants, and error handling as specified in the coding styles below. Ensure that the code is separated into the appropriate folders and files, with clear folder and file names & path displayed. Maintain all existing UI components and functionalities while applying the specified styles. Thoroughly verify that no part of the original code, especially UI elements, interactions, or functionality, is lost during the restructuring process. Use detailed checks to ensure all elements are correctly styled and integrated as per the guidelines.\n\nIf any ambiguity arises in implementing styles without affecting the code's functionality, maintain the original code logic, and add comments highlighting potential adjustments needed to fully align with the coding standards.\n\nCoding Styles are as follows:\n{data_content}\n"
@@ -829,6 +830,11 @@ async def figma_custom_ui(item: Item):
     payload = [{"type": "text", "text": f"Further Enhance the generated code, as the generated code might overlookedd certain UI elements, can you please check and fix the code such that it should be about 95% match according to the ui (keeping the adaptablity and coding styles unchanged.).Do not modify, alter, or loose the existing UI elements, layout, or structure in any way. See whichever elements is missing in the code or the position of the element is improper and modify the code accordingly, (Image url attached). Provide project structure with name for each file and provide complete formated code for the ui. \n for the generated project structure, please provide terminal command to create structure in ide. give two seperate commands for windows and macos, command should be one liner without any comments and discussion. it should be such that, code and project structure is setup directly by running the command."},{"type": "image_url","image_url": {"url": image_url}}]
 
     response_6 = get_response(thread_id, assistant_id, payload)
+    if response_6!="Failed":
+        if is_styles_used == "no":
+            alert_statement = "Seems like personalization process was not done. The generated code will be based on generic coding standards. If you would like a personalized code, please go to home page, click personalization button and retry the prompt\n\n"
+            response_6 = alert_statement + response_6 
+
     logging.info(response_6)
 
     try:
@@ -854,7 +860,7 @@ async def figma_custom_ui(item: Item):
     logging.info(helping_data)
     delete_folder_recursive(dir_path)
 
-    if response_final == "Failed":
+    if response_6 == "Failed":
         store_error(
             user_id, "/figma-custom-ui/", "assistant api failed to generate response"
         )
@@ -896,6 +902,8 @@ async def multiple_files_flow(item: Item):
     assistant_id = temp_data["assistant_id"]
     thread_id = temp_data["thread_id"]
 
+    is_styles_used = "no"
+
     logging.info(f"prompt: {prompt}")
     logging.info(f"user_role: {user_role}")
     logging.info(f"is_screen_used: {is_screen_used}")
@@ -915,32 +923,32 @@ async def multiple_files_flow(item: Item):
             #if image url is also null
             if image_url == "null" or image_url == "":
                 store_error(user_id,"/figma-custom-ui/","Unable to fetch Figma Data and UI image")
-                return {"status":"failed","response":"Alert: Unable to fetch Figma Data and UI image\n1. Kindly check if you had entered a valid figma url\n2. You have a stable internet connection\n3. You had entered a valid Screen name in prompt."}
+                return {"status":"failed","response":"Screen not found. Please use Upload button to provide the Figma where the screen exists"}
             #if image url is not null
             else:
                 store_error(user_id,"/figma-custom-ui/","Unable to fetch Figma Data")
-                return {"status":"failed","response":"Alert: Unable to fetch Figma Data\n1. Kindly check if you had entered a valid figma url\n2. You have a stable internet connection\n3. You had entered a valid Screen name in prompt."}
+                return {"status":"failed","response":"We've encountered a glitch, please try again. If you see this error again, please add comments"}
         # if figma data is not null
         else:
             #if image url is null
             if image_url == "null" or image_url == "":
                 store_error(user_id,"/figma-custom-ui/","Unable to fetch UI image")
-                return {"status":"failed","response":"Alert: Unable to fetch UI image\n1. Kindly check if you had entered a valid figma url\n2. You have a stable internet connection\n3. You had entered a valid Screen name in prompt."}
+                return {"status":"failed","response":"We've encountered a glitch, please try again. If you see this error again, please add comments"}
             #if image url is not null
             else:
                 logging.info("Both image url and figma data is received")
-        
+
         #if project code is present or not
         if api_data == "null" or api_data == "":
             store_error(user_id,"/figma-custom-ui/","Unable to fetch UI image")
-            return {"status":"failed","response":"Alert: Unable to fetch project code\n1. Kindly check if your VS code is opened\n2. Check if the HuTouch AI extension is installed on VS code\n3. There should not be more than one project opened in vs code at once\n4. Check if you have  a stable internet connection"}
+            return {"status":"failed","response":"Alert: Unable to fetch project code\n1. Kindly check if your VS code is opened\n2. Check if the HuTouch AI extension is installed on VS code\n3. There should not be more than one project opened in VS code at once\n4. Check if you have  a stable internet connection"}
         else:
             logging.info("Project code received")
     else:
         #if project code is present or not
         if api_data == "null" or api_data == "":
             store_error(user_id,"/figma-custom-ui/","Unable to fetch UI image")
-            return {"status":"failed","response":"Alert: Unable to fetch project code\n1. Kindly check if your VS code is opened\n2. Check if the HuTouch AI extension is installed on VS code\n3. There should not be more than one project opened in vs code at once\n4. Check if you have  a stable internet connection"}
+            return {"status":"failed","response":"Alert: Unable to fetch project code\n1. Kindly check if your VS code is opened\n2. Check if the HuTouch AI extension is installed on VS code\n3. There should not be more than one project opened in VS code at once\n4. Check if you have  a stable internet connection"}
         else:
             logging.info("Project code received")
 
@@ -1199,13 +1207,14 @@ async def multiple_files_flow(item: Item):
             logging.info("File was successfully uploaded")
 
         if status_project_code["status"] == "success":
+            is_styles_used = "yes"
             logging.info("Using the styles data")
             data_content = status_project_code["data"]
             payload = f"Restructure the generated code with the exact architecture, state management, code structure, adaptive and responsive design, app constants, and error handling as specified in the coding styles below. Ensure that the code is separated into the appropriate folders and files, with clear folder and file names displayed. Maintain all existing UI components and functionalities while applying the specified styles. Thoroughly verify that no part of the original code, especially UI elements, interactions, or functionality, is lost during the restructuring process. Use detailed checks to ensure all elements are correctly styled and integrated as per the guidelines.\n\nIf any ambiguity arises in implementing styles without affecting the codes functionality, maintain the original code logic, and add comments highlighting potential adjustments needed to fully align with the coding standards.\n\nCoding Styles are as follows:\n{data_content}\n"
 
-            logging.info(payload)
+            
             response_5 = get_response(thread_id, assistant_id, payload)
-            response_final = response_5
+            logging.info(response_5)
 
 
         if additional_requirements != "":
@@ -1302,6 +1311,13 @@ async def multiple_files_flow(item: Item):
 
         payload = f"Generated response signifies a new screen along with its components and state management that need to be added into the existing project. Note: Don't replace or remove any existing screen or component. If the project follows a particular statemanagement then add the newly generate states into the existing state. The project files are uploaded, analyze it and check if there are any components which are similar in new screen and if there is then 're-use' the code and don't do the repeatative work. Generate accurate response and give full code. This is the existing project structure:\n{read_me_content}.\n please digest this information and once you understand existing code then Give me production ready code which is formatted, with their projected structure and file/folder name for each genereated code."
         response_6 = get_response(thread_id, assistant_id, payload)
+
+        
+        if response_6!="Failed":
+            if is_styles_used == "no":
+                alert_statement = "Seems like personalization process was not done. The generated code will be based on generic coding standards. If you would like a personalized code, please go to home page, click personalization button and retry the prompt\n\n"
+                response_6 = alert_statement + response_6    
+
         logging.info(response_6)
 
         final_response = response_6
@@ -1954,3 +1970,44 @@ async def get_styles_data(item: Item):
         except:
             logging.info("Error while fetching the data")
             return {"status": "failed"}
+
+@app.post("/structure-code/")
+async def structure_code(item: Item):
+    ai_response = item.data
+    logging.info("Structuring the code")
+    response = client.chat.completions.create(
+    model="gpt-4o-mini",
+    messages=[
+        {
+        "role": "system",
+        "content": [
+            {
+            "type": "text",
+            "text": "You are an assistant that specializes in converting structured plain text input into a JSON object format. Your goal is to ensure that the input is accurately transformed into a JSON object that can be used for further processing.\n\n- Identify file paths and their associated content blocks.\n- The input will be structured in a way where each file starts with a line formatted as `### <file_path>`.\n- The content of each file is enclosed within triple backticks and specifies the language (e.g., ` ```dart `).\n- The output JSON should have a \"project_name\" field and a \"files\" array.\n- Each file object in the \"files\" array should contain:\n  - \"path\": the relative path of the file.\n  - \"content\": the complete content of the file as a string, preserving line breaks.\n- Ensure proper formatting, escaping special characters where necessary, and validate the JSON to ensure it conforms to the expected schema.\n\nUse the following schema as a guide:\n```json\n{\n  \"type\": \"object\",\n  \"properties\": {\n    \"project_name\": {\n      \"type\": \"string\"\n    },\n    \"files\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"path\": {\n            \"type\": \"string\"\n          },\n          \"content\": {\n            \"type\": \"string\"\n          }\n        },\n        \"required\": [\"path\", \"content\"]\n      }\n    }\n  },\n  \"required\": [\"project_name\", \"files\"]\n}\n\nmake sure the conversion process is accurate and error free and no code to lose during conversion."
+            }
+        ]
+        },
+        {
+        "role": "user",
+        "content": [
+            {
+            "type": "text",
+            "text": f"Convert the following structured text into a JSON object. The text includes file paths and their respective content blocks. The output should include a project name and a list of files with their paths and contents as shown in the schema.\n\nInput:\n{ai_response}"
+            }
+        ]
+        },
+    ],
+    temperature=0.6,
+    max_tokens=15339,
+    top_p=1,
+    frequency_penalty=0,
+    presence_penalty=0,
+    response_format={
+        "type": "json_object"
+    }
+    )
+    
+    response_code = response.choices[0].message.content
+    logging.info(response_code)
+
+    return {"status":"success","response":response_code}
